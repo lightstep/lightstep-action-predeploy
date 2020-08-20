@@ -5,6 +5,7 @@
         "jest": true,
         "node": true
     },
+    "ignorePatterns": ["dist/*.js"],
     "extends": "eslint:recommended",
     "globals": {
         "Atomics": "readonly",

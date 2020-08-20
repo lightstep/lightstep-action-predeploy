@@ -61,7 +61,7 @@ async function run() {
         }
 
         const markdown = prTemplate(templateContext)
-        console.log(markdown)
+
         core.setOutput('lightstep_predeploy_md', markdown)
     } catch (error) {
         core.info(error)

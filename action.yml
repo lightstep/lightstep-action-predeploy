@@ -1,9 +1,10 @@
-name: 'Lightstep Deploy Condition Check'
-description: 'checks state of conditions in a lightstep project'
+name: 'Lightstep Pre-Deploy Check'
+author: 'Lightstep, Inc.'
+description: 'Checks health of production environment before deploy'
 
 outputs:
-  lightstep_conditions:
-    description: 'lightstep condition states'
+  lightstep_predeploy_md:
+    description: 'Markdown summary of pre-deploy checks'
 
 runs:
   using: 'node12'

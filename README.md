@@ -2,7 +2,7 @@
 
 The `lightstep/lightstep-action-predeploy` action leverages publicly-available partner and Lightstep APIs to provide insight into the health of production service(s) during software delivery. 
 
-The Javascript-based action runs when a pull request is approved by GitHub reviewers and uses APIs to provide a summary of deployment risk ahead of a code change going to a production environment.
+This Javascript-based action can be used when a pull request is approved by GitHub reviewers and uses APIs to provide a summary of deployment risk ahead of a code change going to a production environment.
 
 ## Requirements
 
@@ -18,8 +18,8 @@ TBD
 
 ## Outputs
 
-TBD
+* `lightstep_predeploy_md` - Markdown-formatted summary of pre-deploy checks.
 
 ## License
 
-TBD.
+Apache License 2.0
