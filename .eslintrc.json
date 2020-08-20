@@ -1,0 +1,42 @@
+{
+    "env": {
+        "commonjs": true,
+        "es6": true,
+        "jest": true,
+        "node": true
+    },
+    "extends": "eslint:recommended",
+    "globals": {
+        "Atomics": "readonly",
+        "SharedArrayBuffer": "readonly"
+    },
+    "parserOptions": {
+        "ecmaVersion": 2018
+    },
+    "rules": {
+      "array-bracket-spacing": [0],
+      "consistent-return": [0],
+      "func-names": [0],
+      "guard-for-in": [0],
+      "indent": [2, 4],
+      "semi": ["error", "never"],
+      "key-spacing": [2, { "align": "colon", "beforeColon": true, "afterColon": true }],
+      "max-len": [2, 120, 4],
+      "new-cap": [0],
+      "no-trailing-spaces": "error",
+      "no-continue": [0],
+      "no-param-reassign": [0],
+      "no-multi-spaces": [2, { "exceptions": {
+          "AssignmentExpression": true,
+          "VariableDeclarator": true
+      }} ],
+      "no-underscore-dangle": [0],
+      "no-unused-vars": [2, { "vars": "all", "args" : "none" }],
+      "no-use-before-define": [2, { "functions": false }],
+      "no-console": [1],
+      "object-shorthand" : [0],
+      "prefer-const": [0],
+      "prefer-rest-params" : [0],
+      "spaced-comment": [0]
+    }
+  }

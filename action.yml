@@ -1,0 +1,10 @@
+name: 'Lightstep Deploy Condition Check'
+description: 'checks state of conditions in a lightstep project'
+
+outputs:
+  lightstep_conditions:
+    description: 'lightstep condition states'
+
+runs:
+  using: 'node12'
+  main: 'dist/index.js'

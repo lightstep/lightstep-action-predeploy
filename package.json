@@ -1,0 +1,28 @@
+{
+  "name": "lightstep-predeploy",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "lint": "eslint .",
+    "prepare": "ncc build index.js -o dist --source-map",
+    "test": "jest",
+    "all": "npm run lint && npm run prepare && npm run test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@actions/core": "^1.2.4",
+    "@actions/github": "^4.0.0",
+    "js-yaml": "^3.14.0",
+    "lightstep-js-sdk": "git+ssh://git@github.com/lightstep/lightstep-js-sdk.git",
+    "lodash.template": "^4.5.0",
+    "node-fetch": "^2.6.0"
+  },
+  "devDependencies": {
+    "@zeit/ncc": "^0.22.3",
+    "eslint": "^7.4.0",
+    "jest": "^26.1.0"
+  }
+}
