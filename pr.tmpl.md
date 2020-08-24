@@ -6,7 +6,7 @@
 | Status | External Link | Summary |
 |--|--|--|
 | <%=trafficLightStatus(lightstep.status)%> | <img src="<%=lightstep.logo%>" height="14px" alt="Lightstep Logo"/> [Monitoring Conditions](<%=lightstep.summaryLink%>) | _<%=lightstep.message%>_ |
-| <%=trafficLightStatus(rollbar.status)%> | <img src="<%=rollbar.logo%>" height="14px" alt="Rollbar Logo"/> [New Items in Latest Version](<%=rollbar.summaryLink%>) | _<%=rollbar.message%>_ |
+<% if (rollbar) { %>| <%=trafficLightStatus(rollbar.status)%> | <img src="<%=rollbar.logo%>" height="14px" alt="Rollbar Logo"/> [New Items in Latest Version](<%=rollbar.summaryLink%>) | _<%=rollbar.message%>_ |<% } %>
 
 #### Details
 <details>

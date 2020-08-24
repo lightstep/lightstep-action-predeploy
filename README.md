@@ -40,14 +40,22 @@ TBD
 
 Inputs can be specified using any combination of a `.lightstep.yml` file in the root of the repository using the action, as inputs to the action, as environment varables.
 
-The following are *required*:
+API keys are always passed as inputs or environment variables.
 
-| Action Input        | `.lightstep.yml` prop    | Env var             |
-| ------------------- | ------------------------ | --------------------
+The following are **required**:
+
+| Action Input        | `.lightstep.yml`         | Env var             |
+| ------------------- | ------------------------ | ------------------- |
 | `lightstep_org`     | `organization`           | `LIGHTSTEP_ORG`     |
 | `lightstep_proj`    | `project`                | `LIGHTSTEP_PROJ`    |
 | `lightstep_api_key` | N/A                      | `LIGHTSTEP_API_KEY` |
 
+Additional inputs (_optional_):
+
+| Action Input         | `.lightstep.yml`  | Env var                |
+| -------------------- | ----------------- | ---------------------- | 
+| `pagerduty_api_token`| N/A               | `PAGERDUTY_API_TOKEN`  |
+| `rollbar_api_token`  | N/A               | `ROLLBAR_API_TOKEN`    |
 
 ## Outputs
 
