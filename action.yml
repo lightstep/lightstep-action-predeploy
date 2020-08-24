@@ -2,6 +2,19 @@ name: 'Lightstep Pre-Deploy Check'
 author: 'Lightstep, Inc.'
 description: 'Checks health of production environment before deploy'
 
+inputs:
+  lightstep_org:
+    description: 'The organization associated with your Lightstep account (usually your company name)'
+    required: false
+  
+  lightstep_project:
+    description: 'The Lightstep project associated with this repository'
+    required: false
+
+  lightstep_api_key:
+    description: 'The key to access the Lightstep public API'
+    required: false
+
 outputs:
   lightstep_predeploy_md:
     description: 'Markdown summary of pre-deploy checks'

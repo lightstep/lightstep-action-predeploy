@@ -1,6 +1,6 @@
 # lightstep-action-predeploy
 
-The `lightstep/lightstep-action-predeploy` action leverages publicly-available partner and Lightstep APIs to provide insight into the health of production service(s) during software delivery. 
+The `lightstep/lightstep-action-predeploy` action provides insight into the health of production service(s) during software delivery. 
 
 This Javascript-based action can be used when a pull request is approved by GitHub reviewers and uses APIs to provide a summary of deployment risk ahead of a code change going to a production environment.
 
@@ -17,6 +17,7 @@ This Javascript-based action can be used when a pull request is approved by GitH
     * Deployment tracking configured for the service
     * Streams created for instrumented service
     * Alerts threshold(s) defined for streams
+    * Lightstep [public API key](https://docs.lightstep.com/docs/create-and-manage-api-keys)
 
 ## Usage
 
@@ -37,7 +38,16 @@ TBD
 
 ## Inputs
 
-TBD
+Inputs can be specified using any combination of a `.lightstep.yml` file in the root of the repository using the action, as inputs to the action, as environment varables.
+
+The following are *required*:
+
+| Action Input        | `.lightstep.yml` prop    | Env var             |
+| ------------------- | ------------------------ | --------------------
+| `lightstep_org`     | `organization`           | `LIGHTSTEP_ORG`     |
+| `lightstep_proj`    | `project`                | `LIGHTSTEP_PROJ`    |
+| `lightstep_api_key` | N/A                      | `LIGHTSTEP_API_KEY` |
+
 
 ## Outputs
 

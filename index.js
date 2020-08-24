@@ -29,16 +29,16 @@ async function run() {
         const { lightstepOrg, lightstepProj, integrations } = config.loadConfig()
 
         if (!lightstepOrg) {
-            core.setFailed('env LIGHTSTEP_ORG must be set or specified in .lightstep.yml')
+            core.setFailed('env LIGHTSTEP_ORG must be set, passed as an input, or specified in .lightstep.yml')
             return
         }
 
         if (!lightstepProj) {
-            core.setFailed('env LIGHTSTEP_PROJ must be set or specified in .lightstep.yml')
+            core.setFailed('env LIGHTSTEP_PROJ must be set, passed as an input, or specified in .lightstep.yml')
             return
         }
 
-        const lightstepToken = process.env.LIGHTSTEP_API_TOKEN
+        const lightstepToken = process.env.LIGHTSTEP_API_KEY || core.getInput('lightstep_api_key')
         var templateContext = { trafficLightStatus }
         templateContext.lightstep = await lightstepContext.getSummary({ lightstepOrg, lightstepProj, lightstepToken })
 
