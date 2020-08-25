@@ -96,11 +96,12 @@ async function run() {
             templateContext.pagerduty = false
         }
 
-        const markdown = prTemplate(templateContext)
-        const state = actionState(
+        templateContext.status = actionState(
             templateContext.lightstep.status,
             templateContext.rollbar && templateContext.rollbar.status)
-        core.setOutput('lightstep_predeploy_status', state)
+        const markdown = prTemplate(templateContext)
+
+        core.setOutput('lightstep_predeploy_status', templateContext.state)
         core.setOutput('lightstep_predeploy_md', markdown)
     } catch (error) {
         // eslint-disable-next-line no-console
