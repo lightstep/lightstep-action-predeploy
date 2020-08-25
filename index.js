@@ -69,9 +69,14 @@ async function run() {
         const lightstepProj = resolveActionInput('lightstep_project', yamlFile)
         const lightstepToken = resolveActionInput('lightstep_api_key')
 
+        core.setOutput('lightstep_organization', lightstepOrg)
+        core.setOutput('lightstep_project', lightstepProj)
+
+        // Lightstep context
         var templateContext = { trafficLightStatus }
         templateContext.lightstep = await lightstepContext.getSummary({ lightstepOrg, lightstepProj, lightstepToken })
 
+        // Rollbar context
         if (yamlFile.integrations.rollbar) {
             assertActionInput('rollbar_api_token')
             const token = resolveActionInput('rollbar_api_token')
@@ -81,6 +86,7 @@ async function run() {
             templateContext.rollbar = false
         }
 
+        // PagerDuty context
         if (yamlFile.integrations.pagerduty) {
             assertActionInput('pagerduty_api_token')
             const token = resolveActionInput('pagerduty_api_token')
@@ -97,7 +103,8 @@ async function run() {
         core.setOutput('lightstep_predeploy_status', state)
         core.setOutput('lightstep_predeploy_md', markdown)
     } catch (error) {
-        core.info(error)
+        // eslint-disable-next-line no-console
+        console.error(error)
         core.setFailed(error.message)
     }
 }

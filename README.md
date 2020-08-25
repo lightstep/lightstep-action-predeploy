@@ -59,7 +59,11 @@ Additional inputs (_optional_):
 
 ## Outputs
 
-* `lightstep_predeploy_md` - Markdown-formatted summary of pre-deploy checks.
+* `lightstep_organization` - Lightstep organization associated with an account
+
+* `lightstep_project` - Lightstep project associated with an organization
+
+* `lightstep_predeploy_md` - Markdown-formatted summary of pre-deploy checks
 
 * `lightstep_predeploy_status` - Status of pre-deploy checks: `ok`, `warn`, `error` or `unknown`
 
