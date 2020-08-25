@@ -2517,7 +2517,7 @@ async function run() {
             templateContext.rollbar && templateContext.rollbar.status)
         const markdown = prTemplate(templateContext)
 
-        core.setOutput('lightstep_predeploy_status', templateContext.state)
+        core.setOutput('lightstep_predeploy_status', templateContext.status)
         core.setOutput('lightstep_predeploy_md', markdown)
     } catch (error) {
         // eslint-disable-next-line no-console
