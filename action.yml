@@ -12,10 +12,13 @@ inputs:
     required: false
 
   lightstep_api_key:
-    description: 'The key to access the Lightstep public API'
+    description: 'The key to access the Lightstep Public API'
     required: false
 
 outputs:
+  lightstep_predeploy_status:
+    description: 'Status of pre-deploy checks after running (error, ok, or unknown)'
+
   lightstep_predeploy_md:
     description: 'Markdown summary of pre-deploy checks'
 

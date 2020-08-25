@@ -31,6 +31,8 @@ const getApiContext = async ({token, service}) => {
 
 exports.getSummary = async ({token, service}) => {
     const context = await getApiContext({token, service})
+    // todo: handle error case
+
     var status = "unknown"
     var onCallNames = context.oncalls.map(o => o.user.summary)
     var summaryLink = context.service.html_url
@@ -43,9 +45,3 @@ exports.getSummary = async ({token, service}) => {
         logo
     }
 }
-/*(async () => {
-    //const context = await getApiContext({token : 'y_NbAkKc66ryYTWUXYEu', serviceId : 'PC8O0L3'})
-    const summary = await getSummary({token : 'y_NbAkKc66ryYTWUXYEu', serviceId : 'PC8O0L3'})
-
-    console.dir(summary)
-})()*/

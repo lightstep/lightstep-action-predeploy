@@ -30,6 +30,8 @@ const getApiContext = async ({token, environment}) => {
 
 exports.getSummary = async ({token, environment, project, account}) => {
     const context = await getApiContext({token, environment})
+    // todo: handle error case
+
     if (context === null) {
         return {
             "status"  : "unknown",

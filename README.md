@@ -61,6 +61,8 @@ Additional inputs (_optional_):
 
 * `lightstep_predeploy_md` - Markdown-formatted summary of pre-deploy checks.
 
+* `lightstep_predeploy_status` - Status of pre-deploy checks: `ok`, `warn`, `error` or `unknown`
+
 ## License
 
 Apache License 2.0

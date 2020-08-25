@@ -36,6 +36,17 @@ const resolveActionInput = (name, config = {}) => {
 }
 
 /**
+ * Determines status of all pre-deploy checks
+ * @param  {...any} states array of context summary statuses
+ */
+const actionState = (...states) => {
+    return (states.find(s => s === 'error') ||
+        states.find(s => s === 'warn') ||
+        states.find(s => s === 'unknown') ||
+        'ok')
+}
+
+/**
  * Fails action if input does not exist
  * @param {*} name input name
  */
@@ -80,10 +91,12 @@ async function run() {
         }
 
         const markdown = prTemplate(templateContext)
-
+        const state = actionState(
+            templateContext.lightstep.status,
+            templateContext.rollbar && templateContext.rollbar.status)
+        core.setOutput('lightstep_predeploy_status', state)
         core.setOutput('lightstep_predeploy_md', markdown)
     } catch (error) {
-        console.error(error)
         core.info(error)
         core.setFailed(error.message)
     }

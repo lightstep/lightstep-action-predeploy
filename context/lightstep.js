@@ -29,6 +29,8 @@ const getApiContext = async ({lightstepProj, lightstepOrg, lightstepToken}) => {
 exports.getSummary = async ({lightstepProj, lightstepOrg, lightstepToken}) => {
     const context = await getApiContext({lightstepProj, lightstepOrg, lightstepToken})
 
+    // todo: handle error case + no conditions
+
     var status = "unknown"
     var message = "Condition status is unknown"
     const logo = "https://user-images.githubusercontent.com/27153/90803298-6510e300-e2cd-11ea-91fa-5795a4481e20.png"
