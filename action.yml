@@ -15,6 +15,14 @@ inputs:
     description: 'The key to access the Lightstep Public API'
     required: false
 
+  rollbar_api_token:
+    description: 'The token to access the Rollbar API'
+    required: false
+  
+  pagerduty_api_token:
+    description: 'The token to access the PagerDuty API'
+    required: false
+
 outputs:
   lightstep_predeploy_status:
     description: 'Status of pre-deploy checks after running (error, ok, or unknown)'

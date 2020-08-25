@@ -2416,7 +2416,6 @@ exports.plugins = plugins;
 
 const core = __webpack_require__(470)
 
-//const lightstepSdk = require('lightstep-js-sdk')
 const path = __webpack_require__(622)
 const fs = __webpack_require__(747)
 const template = __webpack_require__(906)
@@ -2440,54 +2439,83 @@ function trafficLightStatus(s) {
     }
 }
 
+/**
+ * Resolves input as an enviornment variable or action input
+ * @param {*} name input name
+ */
+const resolveActionInput = (name, config = {}) => {
+    if (typeof name !== 'string') {
+        return null
+    }
+    const configName = name.replace('lightstep_', '')
+    return process.env[name.toUpperCase()] || core.getInput(name) || config[configName]
+}
+
+/**
+ * Determines status of all pre-deploy checks
+ * @param  {...any} states array of context summary statuses
+ */
+const actionState = (...states) => {
+    return (states.find(s => s === 'error') ||
+        states.find(s => s === 'warn') ||
+        states.find(s => s === 'unknown') ||
+        'ok')
+}
+
+/**
+ * Fails action if input does not exist
+ * @param {*} name input name
+ */
+const assertActionInput = (name, config) => {
+    if (!resolveActionInput(name, config)) {
+        core.setFailed(
+            `Input ${name} must be set as an env var, passed as an action input, or specified in .lightstep.yml`)
+    }
+}
+
 async function run() {
     try {
-        const { lightstepOrg, lightstepProj, integrations } = config.loadConfig()
+        const yamlFile = config.loadConfig()
 
-        if (!lightstepOrg) {
-            core.setFailed('env LIGHTSTEP_ORG must be set or specified in .lightstep.yml')
-            return
-        }
+        assertActionInput('lightstep_api_key')
+        assertActionInput('lightstep_organization', yamlFile)
+        assertActionInput('lightstep_project', yamlFile)
 
-        if (!lightstepProj) {
-            core.setFailed('env LIGHTSTEP_PROJ must be set or specified in .lightstep.yml')
-            return
-        }
+        const lightstepOrg = resolveActionInput('lightstep_organization')
+        const lightstepProj = resolveActionInput('lightstep_project')
+        const lightstepToken = resolveActionInput('lightstep_api_key')
 
-        const lightstepToken = process.env.LIGHTSTEP_API_TOKEN
         var templateContext = { trafficLightStatus }
         templateContext.lightstep = await lightstepContext.getSummary({ lightstepOrg, lightstepProj, lightstepToken })
 
-        if (integrations.rollbar) {
-            if (!process.env.ROLLBAR_API_TOKEN) {
-                core.setFailed('env ROLLBAR_API_TOKEN must be set as a GitHub Action secret')
-                return
-            }
-            const token = process.env.ROLLBAR_API_TOKEN
-            templateContext.rollbar = await rollbarContext.getSummary({ token, ...integrations.rollbar})
+        if (yamlFile.integrations.rollbar) {
+            assertActionInput('rollbar_api_token')
+            const token = resolveActionInput('rollbar_api_token')
+            templateContext.rollbar = await rollbarContext.getSummary(
+                { token : token, rollbar : yamlFile.integrations.rollbar })
+        } else {
+            templateContext.rollbar = false
         }
 
-        if (integrations.pagerduty) {
-            if (!process.env.PAGERDUTY_API_TOKEN) {
-                core.setFailed('env PAGERDUTY_API_TOKEN must be set as a GitHub Action secret')
-                return
-            }
-            const token = process.env.PAGERDUTY_API_TOKEN
-            templateContext.pagerduty = await pagerdutyContext.getSummary({ token, ...integrations.pagerduty})
+        if (yamlFile.integrations.pagerduty) {
+            assertActionInput('pagerduty_api_token')
+            const token = resolveActionInput('pagerduty_api_token')
+            templateContext.pagerduty = await pagerdutyContext.getSummary(
+                { token : token, pagerduty : yamlFile.integrations.pagerduty })
+        } else {
+            templateContext.pagerduty = false
         }
 
         const markdown = prTemplate(templateContext)
-
+        const state = actionState(
+            templateContext.lightstep.status,
+            templateContext.rollbar && templateContext.rollbar.status)
+        core.setOutput('lightstep_predeploy_status', state)
         core.setOutput('lightstep_predeploy_md', markdown)
     } catch (error) {
         core.info(error)
         core.setFailed(error.message)
     }
-}
-
-if (!process.env.LIGHTSTEP_API_TOKEN) {
-    core.setFailed('env LIGHTSTEP_API_TOKEN must be set must be set as a GitHub Action secret')
-    return
 }
 
 run()
@@ -3727,13 +3755,9 @@ function loadConfig() {
     try {
         let fileContents = fs.readFileSync(path.join(process.env.GITHUB_WORKSPACE, LIGHTSTEP_CONFIG_FILE), 'utf8')
         const yamlConfig = yaml.safeLoadAll(fileContents)
-        return {
-            lightstepOrg  : process.env.LIGHTSTEP_ORG || yamlConfig[0].organization,
-            lightstepProj : process.env.LIGHTSTEP_PROJECT || yamlConfig[0].project,
-            integrations  : yamlConfig[0].integrations
-        }
+        return yamlConfig[0]
     } catch (e) {
-        return null
+        return { integrations : {} }
     }
 }
 
@@ -3962,6 +3986,8 @@ const getApiContext = async ({lightstepProj, lightstepOrg, lightstepToken}) => {
 
 exports.getSummary = async ({lightstepProj, lightstepOrg, lightstepToken}) => {
     const context = await getApiContext({lightstepProj, lightstepOrg, lightstepToken})
+
+    // todo: handle error case + no conditions
 
     var status = "unknown"
     var message = "Condition status is unknown"
@@ -7596,6 +7622,8 @@ const getApiContext = async ({token, service}) => {
 
 exports.getSummary = async ({token, service}) => {
     const context = await getApiContext({token, service})
+    // todo: handle error case
+
     var status = "unknown"
     var onCallNames = context.oncalls.map(o => o.user.summary)
     var summaryLink = context.service.html_url
@@ -7608,12 +7636,7 @@ exports.getSummary = async ({token, service}) => {
         logo
     }
 }
-/*(async () => {
-    //const context = await getApiContext({token : 'y_NbAkKc66ryYTWUXYEu', serviceId : 'PC8O0L3'})
-    const summary = await getSummary({token : 'y_NbAkKc66ryYTWUXYEu', serviceId : 'PC8O0L3'})
 
-    console.dir(summary)
-})()*/
 
 /***/ }),
 /* 362 */,
@@ -12440,6 +12463,8 @@ const getApiContext = async ({token, environment}) => {
 
 exports.getSummary = async ({token, environment, project, account}) => {
     const context = await getApiContext({token, environment})
+    // todo: handle error case
+
     if (context === null) {
         return {
             "status"  : "unknown",
