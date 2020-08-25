@@ -65,8 +65,8 @@ async function run() {
         assertActionInput('lightstep_organization', yamlFile)
         assertActionInput('lightstep_project', yamlFile)
 
-        const lightstepOrg = resolveActionInput('lightstep_organization')
-        const lightstepProj = resolveActionInput('lightstep_project')
+        const lightstepOrg = resolveActionInput('lightstep_organization', yamlFile)
+        const lightstepProj = resolveActionInput('lightstep_project', yamlFile)
         const lightstepToken = resolveActionInput('lightstep_api_key')
 
         var templateContext = { trafficLightStatus }
