@@ -2497,7 +2497,7 @@ async function run() {
             assertActionInput('rollbar_api_token')
             const token = resolveActionInput('rollbar_api_token')
             templateContext.rollbar = await rollbarContext.getSummary(
-                { token : token, rollbar : yamlFile.integrations.rollbar })
+                { token : token, yamlConfig : yamlFile.integrations.rollbar })
         } else {
             templateContext.rollbar = false
         }
@@ -2507,7 +2507,7 @@ async function run() {
             assertActionInput('pagerduty_api_token')
             const token = resolveActionInput('pagerduty_api_token')
             templateContext.pagerduty = await pagerdutyContext.getSummary(
-                { token : token, pagerduty : yamlFile.integrations.pagerduty })
+                { token : token, yamlConfig : yamlFile.integrations.pagerduty })
         } else {
             templateContext.pagerduty = false
         }
@@ -7627,7 +7627,8 @@ const getApiContext = async ({token, service}) => {
     }
 }
 
-exports.getSummary = async ({token, service}) => {
+exports.getSummary = async ({token, yamlConfig}) => {
+    const { service } = yamlConfig
     const context = await getApiContext({token, service})
     // todo: handle error case
 
@@ -12468,7 +12469,8 @@ const getApiContext = async ({token, environment}) => {
     return versions.result
 }
 
-exports.getSummary = async ({token, environment, project, account}) => {
+exports.getSummary = async ({token, yamlConfig}) => {
+    const { environment, account, project } = yamlConfig
     const context = await getApiContext({token, environment})
     // todo: handle error case
 

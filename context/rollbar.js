@@ -28,7 +28,8 @@ const getApiContext = async ({token, environment}) => {
     return versions.result
 }
 
-exports.getSummary = async ({token, environment, project, account}) => {
+exports.getSummary = async ({token, yamlConfig}) => {
+    const { environment, account, project } = yamlConfig
     const context = await getApiContext({token, environment})
     // todo: handle error case
 

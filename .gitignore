@@ -1,5 +1,7 @@
 node_modules/
 
+.lightstep.yml
+
 # Optional npm cache directory
 .npm
 

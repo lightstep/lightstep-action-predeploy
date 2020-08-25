@@ -29,7 +29,8 @@ const getApiContext = async ({token, service}) => {
     }
 }
 
-exports.getSummary = async ({token, service}) => {
+exports.getSummary = async ({token, yamlConfig}) => {
+    const { service } = yamlConfig
     const context = await getApiContext({token, service})
     // todo: handle error case
 
