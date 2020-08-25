@@ -3,7 +3,7 @@ author: 'Lightstep, Inc.'
 description: 'Checks health of production environment before deploy'
 
 inputs:
-  lightstep_org:
+  lightstep_organization:
     description: 'The organization associated with your Lightstep account (usually your company name)'
     required: false
   

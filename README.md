@@ -44,11 +44,11 @@ API keys are always passed as inputs or environment variables.
 
 The following are **required**:
 
-| Action Input        | `.lightstep.yml`         | Env var             |
-| ------------------- | ------------------------ | ------------------- |
-| `lightstep_org`     | `organization`           | `LIGHTSTEP_ORG`     |
-| `lightstep_proj`    | `project`                | `LIGHTSTEP_PROJ`    |
-| `lightstep_api_key` | N/A                      | `LIGHTSTEP_API_KEY` |
+| Action Input             | `.lightstep.yml`| Env var                   |
+| ------------------------ | --------------- | ------------------------- |
+| `lightstep_organization` | `organization`  | `LIGHTSTEP_ORGANIZATION`  |
+| `lightstep_project`      | `project`       | `LIGHTSTEP_PROJECT`       |
+| `lightstep_api_key`      | N/A             | `LIGHTSTEP_API_KEY`       |
 
 Additional inputs (_optional_):
 

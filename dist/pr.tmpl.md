@@ -1,5 +1,5 @@
 <% hasError = (status === 'warn' || status === 'error' || status === 'unknown') %>
-<% if (hasError) { %>} ### :warning: Deploy with caution :warning:
+<% if (hasError) { %>### :warning: Deploy with caution :warning:
 
 > There are errors or warnings in production.<% } %>
 <% if (!hasError) { %>### :100: Pre-deploy Checks Passed :100: <% } %>

@@ -36,17 +36,6 @@ const resolveActionInput = (name, config = {}) => {
 }
 
 /**
- * Determines status of all pre-deploy checks
- * @param  {...any} states array of context summary statuses
- */
-const actionState = (...states) => {
-    return (states.find(s => s === 'error') ||
-        states.find(s => s === 'warn') ||
-        states.find(s => s === 'unknown') ||
-        'ok')
-}
-
-/**
  * Fails action if input does not exist
  * @param {*} name input name
  */
@@ -55,6 +44,17 @@ const assertActionInput = (name, config) => {
         core.setFailed(
             `Input ${name} must be set as an env var, passed as an action input, or specified in .lightstep.yml`)
     }
+}
+
+/**
+ * Determines status of all pre-deploy checks
+ * @param  {...any} states array of context summary statuses
+ */
+const actionState = (...states) => {
+    return (states.find(s => s === 'error') ||
+        states.find(s => s === 'warn') ||
+        states.find(s => s === 'unknown') ||
+        'ok')
 }
 
 async function run() {
