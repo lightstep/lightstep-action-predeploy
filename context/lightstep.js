@@ -38,16 +38,16 @@ exports.getSummary = async ({lightstepProj, lightstepOrg, lightstepToken}) => {
         return { message : `${c.name}: ${c.state}` }
     })
     const summaryLink = `https://app.lightstep.com/${lightstepProj}/service-directory`
-    const noViolations = context.filter(c => c.state === 'not-violated')
-    const violated = context.filter(c => c.state === 'violated')
+    const noViolations = context.filter(c => c.state === 'false')
+    const violated = context.filter(c => c.state === 'true')
 
-    if (noViolations.count === context.length) {
+    if (noViolations.length === context.length) {
         status = "ok"
         message = "No conditions have violations"
     }
 
 
-    if (violated.count > 1) {
+    if (violated.length > 1) {
         status = "error"
         message = "Condition(s) have violations"
     }
