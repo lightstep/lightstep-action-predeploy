@@ -1,0 +1,96 @@
+<!doctype html>
+<html class="no-js" lang="">
+
+<head>
+  <meta charset="utf-8">
+  <title></title>
+  <meta name="description" content="">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="stylesheet" href="css/main.css">
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/mini.css/3.0.1/mini-default.min.css">
+  <meta name="theme-color" content="#fafafa">
+</head>
+
+<body>
+  <div class="content">
+    <img src="img/lightstep_logo.png" id="logo" title="Lightstep Logo"/>
+    <form id="form">
+      <fieldset>
+        <legend>Get started with the Pre-Deploy Action</legend>
+        <p>Understand production health before a deploy.</p>
+        <label for="username">GitHub Repository (user/project)</label>
+        <input type="text" required="true" id="repo" placeholder="lightstep/hipster-shop"/>
+      </fieldset>
+      <input type="submit" id="submit" style="color: white; background-color: rgb(16, 157, 73);" value="Set up this workflow " />
+    </form>
+  </div>
+<pre id="pr-desc" style="display: none;">
+### Add Pre-Deploy GitHub Action Workflow
+
+_Complete the following tasks to run the workflow._
+
+- [x] Add workflow file
+- [ ] Add a `.lightstep.yml` file to the repo's root directory
+- [ ] Add `LIGHTSTEP_API_KEY` encrypted secret to this repo under "Settings"
+- [ ] Configure PagerDuty for on-call info (opt)
+- [ ] Configure Rollbar for error info (opt)
+- [ ] Approve this PR, then see the action run! :tada:
+
+Need help? Visit the Lightstep Learning path for this action.
+
+</pre>
+<pre id="workflow-file" style="display: none;">
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+ deploy_check_job:
+   runs-on: ubuntu-latest
+   name: Verify Pre-Deploy Status
+
+   steps:  
+     - name: Checkout
+       uses: actions/checkout@v2
+
+     # Run checks
+     - name: Lightstep Pre-Deploy Check
+       id: lightstep-predeploy
+       uses: lightstep/lightstep-action-predeploy
+       with:
+         lightstep_api_key: ${{ secrets.LIGHTSTEP_API_KEY }}
+         pagerduty_api_token: ${{ secrets.PAGERDUTY_API_TOKEN }}
+         rollbar_api_token: ${{ secrets.ROLLBAR_API_TOKEN }}
+
+     # Output status as PR comment
+     - name: Add PR Comment
+       uses: unsplash/comment-on-pr@master
+       env:
+         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+       with:
+         msg: ${{ steps.lightstep-predeploy.outputs.lightstep_predeploy_md }}
+         check_for_duplicate_msg: true
+</pre>
+  <script>
+    function onSubmit(e) {
+      const repo = document.getElementById('repo');
+      const filename = ".github/workflows/lightstep.yml";
+      const val = document.getElementById('workflow-file').innerText;
+      const desc = document.getElementById('pr-desc').innerText
+      const newFile = "/new/master?filename=" +
+        encodeURIComponent(filename) +
+        "&description=" + encodeURIComponent(desc) + 
+        "&value=" + encodeURIComponent(val)
+      const url = "https://github.com/" + repo.value + newFile;
+      window.location.href = url
+    
+      e.preventDefault();
+    }
+    const form = document.getElementById('form');
+    form.addEventListener('submit', onSubmit);
+  </script>
+</body>
+
+</html>
