@@ -21,9 +21,9 @@ This Javascript-based action can be used when a pull request is approved by GitH
 
 ## Usage
 
-This action can be run on `ubuntu-latest` GitHub Actions runner.
+This action can be run on `ubuntu-latest` GitHub Actions runner as a step in any GitHub Action workflow:
 
-```
+```yaml
     steps:  
       - name: Checkout
         uses: actions/checkout@v2
@@ -32,9 +32,48 @@ This action can be run on `ubuntu-latest` GitHub Actions runner.
         uses: lightstep/lightstep-action-predeploy
 ```
 
-## Examples
+### Example Workflow
 
-TBD
+This workflow uses the action to add a comment to a pull request after a review has been submitted.
+
+#### `.github/workflows/predeploy.yml`
+
+```yaml
+on: 
+   pull_request_review:
+     types: [submitted]
+
+jobs:    
+  deploy_check_job:
+    runs-on: ubuntu-latest
+    name: Verify Pre-Deploy Status
+
+    steps:  
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      # Run checks
+      - name: Lightstep Pre-Deploy Check
+        id: lightstep-predeploy
+        uses: lightstep/lightstep-action-predeploy
+        with:
+          lightstep_api_key: ${{ secrets.LIGHTSTEP_API_KEY }}
+          pagerduty_api_token: ${{ secrets.PAGERDUTY_API_TOKEN }}
+          rollbar_api_token: ${{ secrets.ROLLBAR_API_TOKEN }}
+
+      # Output status as PR comment
+      - name: Add PR Comment
+        uses: unsplash/comment-on-pr@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          msg: ${{ steps.lightstep-predeploy.outputs.lightstep_predeploy_md }}
+          check_for_duplicate_msg: true
+```
+
+### Additional Examples
+
+A fully working example is available in the [hipster-shop](https://github.com/lightstep/hipster-shop) repository.
 
 ## Inputs
 
