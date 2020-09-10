@@ -36,6 +36,8 @@ This action can be run on `ubuntu-latest` GitHub Actions runner as a step in any
 
 This workflow uses the action to add a comment to a pull request after a review has been submitted.
 
+👉 [Try out this workflow on your repository](https://lightstep.github.io/lightstep-action-predeploy/)
+
 #### `.github/workflows/predeploy.yml`
 
 ```yaml
