@@ -39,11 +39,11 @@ This workflow uses the action to add a comment to a pull request after a review 
 #### `.github/workflows/predeploy.yml`
 
 ```yaml
-on: 
-   pull_request_review:
-     types: [submitted]
+on:
+  pull_request_review:
+    types: [submitted]
 
-jobs:    
+jobs:
   deploy_check_job:
     runs-on: ubuntu-latest
     name: Verify Pre-Deploy Status
@@ -95,6 +95,25 @@ Additional inputs (_optional_):
 | -------------------- | ----------------- | ---------------------- | 
 | `pagerduty_api_token`| N/A               | `PAGERDUTY_API_TOKEN`  |
 | `rollbar_api_token`  | N/A               | `ROLLBAR_API_TOKEN`    |
+
+## `.lightstep.yml` Configuratation
+
+This action reads configuration from a special file you add to the root of your repository.
+
+Here's an example `.lightstep.yml` file that specifies PagerDuty and Rollbar-specific configuration: 
+
+```yaml
+organization: -13ac9ef7
+project: hipster-shop
+
+integrations:
+  rollbar:
+    environment: production
+    account: lightstep
+    project: hipster-shop
+  pagerduty:
+    service: PA0B3RR
+```
 
 ## Outputs
 
