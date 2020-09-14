@@ -4293,7 +4293,7 @@ exports.getSummary = async ({lightstepProj, lightstepOrg, lightstepToken}) => {
     const details = context.map(c => {
         return { message : `${c.name}: ${c.state}` }
     })
-    const summaryLink = `https://app.lightstep.com/${lightstepProj}/service-directory`
+    const summaryLink = `https://app.lightstep.com/${lightstepProj}/monitoring/conditions`
     const noViolations = context.filter(c => c.state === 'false')
     const violated = context.filter(c => c.state === 'true')
 
