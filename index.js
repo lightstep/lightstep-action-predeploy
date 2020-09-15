@@ -76,7 +76,8 @@ async function run() {
 
         // Lightstep context
         var templateContext = { trafficLightStatus }
-        templateContext.lightstep = await lightstepContext.getSummary({ lightstepOrg, lightstepProj, lightstepToken })
+        templateContext.lightstep = await lightstepContext.getSummary(
+            { lightstepOrg, lightstepProj, lightstepToken, lightstepConditions : yamlFile.conditions })
 
         // Rollbar context
         if (yamlFile.integrations.rollbar) {
