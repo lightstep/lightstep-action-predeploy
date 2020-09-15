@@ -2708,6 +2708,7 @@ const core = __webpack_require__(470)
 
 const path = __webpack_require__(622)
 const fs = __webpack_require__(747)
+const assert = __webpack_require__(357)
 const template = __webpack_require__(906)
 const config = __webpack_require__(164)
 
@@ -2747,8 +2748,9 @@ const resolveActionInput = (name, config = {}) => {
  */
 const assertActionInput = (name, config) => {
     if (!resolveActionInput(name, config)) {
-        core.setFailed(
-            `Input ${name} must be set as an env var, passed as an action input, or specified in .lightstep.yml`)
+        const msg = `Input ${name} must be set as an env var, passed as an action input, or specified in .lightstep.yml`
+        core.setFailed(msg)
+        assert.fail(msg)
     }
 }
 
@@ -2780,7 +2782,8 @@ async function run() {
 
         // Lightstep context
         var templateContext = { trafficLightStatus }
-        templateContext.lightstep = await lightstepContext.getSummary({ lightstepOrg, lightstepProj, lightstepToken })
+        templateContext.lightstep = await lightstepContext.getSummary(
+            { lightstepOrg, lightstepProj, lightstepToken, lightstepConditions : yamlFile.conditions })
 
         // Rollbar context
         if (yamlFile.integrations.rollbar) {
@@ -2810,8 +2813,6 @@ async function run() {
         core.setOutput('lightstep_predeploy_status', templateContext.status)
         core.setOutput('lightstep_predeploy_md', markdown)
     } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error(error)
         core.setFailed(error.message)
     }
 }
@@ -4256,15 +4257,20 @@ module.exports = baseGetTag;
 
 const lightstepSdk = __webpack_require__(917)
 
-const getApiContext = async ({lightstepProj, lightstepOrg, lightstepToken}) => {
-    const apiClient = await lightstepSdk.init(lightstepOrg, lightstepToken)
+const LIGHTSTEP_WEB_HOST = 'app.lightstep.com'
 
-    const conditionsResponse = await apiClient.sdk.apis.Conditions.listConditionsID({
-        organization : lightstepOrg,
-        project      : lightstepProj
-    })
-    const conditionIds = conditionsResponse.body.data.map(c => c.id)
-    const conditionStatusPromises = conditionIds.map(id => apiClient.sdk.apis.Conditions.getConditionStatusID({
+const getApiContext = async ({lightstepProj, lightstepOrg, lightstepToken, lightstepConditions = []}) => {
+    const apiClient = await lightstepSdk.init(lightstepOrg, lightstepToken)
+    // if no conditions are specified, use all conditions from project
+    if (lightstepConditions.length === 0) {
+        const conditionsResponse = await apiClient.sdk.apis.Conditions.listConditionsID({
+            organization : lightstepOrg,
+            project      : lightstepProj
+        })
+        lightstepConditions = conditionsResponse.body.data.map(c => c.id)
+    }
+
+    const conditionStatusPromises = lightstepConditions.map(id => apiClient.sdk.apis.Conditions.getConditionStatusID({
         'condition-id' : id,
         organization   : lightstepOrg,
         project        : lightstepProj
@@ -4275,47 +4281,56 @@ const getApiContext = async ({lightstepProj, lightstepOrg, lightstepToken}) => {
         const cleanId = s.body.data.id.replace('-status', '')
         return {
             id    : cleanId,
-            name  : conditionsResponse.body.data.find(s => s.id === cleanId).attributes.name,
+            name  : s.body.data.attributes.expression,
             state : s.body.data.attributes.state
         }
     })
     return conditionStatuses
 }
 
-exports.getSummary = async ({lightstepProj, lightstepOrg, lightstepToken}) => {
-    const context = await getApiContext({lightstepProj, lightstepOrg, lightstepToken})
+const ICON_IMG = "https://user-images.githubusercontent.com/27153/90803298-6510e300-e2cd-11ea-91fa-5795a4481e20.png"
 
-    // todo: handle error case + no conditions
+exports.getSummary = async ({lightstepProj, lightstepOrg, lightstepToken, lightstepConditions}) => {
+    try {
+        const context = await getApiContext({lightstepProj, lightstepOrg, lightstepToken, lightstepConditions})
 
-    var status = "unknown"
-    var message = "Condition status is unknown"
-    const logo = "https://user-images.githubusercontent.com/27153/90803298-6510e300-e2cd-11ea-91fa-5795a4481e20.png"
-    const details = context.map(c => {
-        return { message : `${c.name}: ${c.state}` }
-    })
-    const summaryLink = `https://app.lightstep.com/${lightstepProj}/monitoring/conditions`
-    const noViolations = context.filter(c => c.state === 'false')
-    const violated = context.filter(c => c.state === 'true')
+        // todo: handle no conditions
 
-    if (noViolations.length === context.length) {
-        status = "ok"
-        message = "No conditions have violations"
+        var status = "unknown"
+        var message = "Condition status is unknown"
+        const details = context.map(c => {
+            return { message : `${c.name}: ${c.state}` }
+        })
+        const summaryLink = `https://${LIGHTSTEP_WEB_HOST}/${lightstepProj}/monitoring/conditions`
+        const noViolations = context.filter(c => c.state === 'false')
+        const violated = context.filter(c => c.state === 'true')
+
+        if (noViolations.length === context.length) {
+            status = "ok"
+            message = "No conditions have violations"
+        } else if (violated.length > 1) {
+            status = "error"
+            message = "Condition(s) have violations"
+        }
+
+        return {
+            status,
+            message,
+            summaryLink,
+            details,
+            context,
+            logo : ICON_IMG
+        }
+    } catch (e) {
+        return {
+            status      : "unknown",
+            message     : `Lightstep API Error: ${e.message}`,
+            summaryLink : "https://lightstep.com",
+            details     : [],
+            logo        : ICON_IMG
+        }
     }
 
-
-    if (violated.length > 1) {
-        status = "error"
-        message = "Condition(s) have violations"
-    }
-
-    return {
-        status,
-        message,
-        summaryLink,
-        details,
-        context,
-        logo
-    }
 }
 
 
@@ -7858,7 +7873,12 @@ module.exports = basePick;
 
 
 /***/ }),
-/* 357 */,
+/* 357 */
+/***/ (function(module) {
+
+module.exports = require("assert");
+
+/***/ }),
 /* 358 */,
 /* 359 */,
 /* 360 */
@@ -7935,22 +7955,31 @@ const getApiContext = async ({token, service}) => {
     }
 }
 
+const ICON_IMG = "https://user-images.githubusercontent.com/27153/90803915-4fe88400-e2ce-11ea-803f-47b9c244799d.png"
+
 exports.getSummary = async ({token, yamlConfig}) => {
     const { service } = yamlConfig
-    const context = await getApiContext({token, service})
-    // todo: handle error case
 
-    var status = "unknown"
-    var onCallNames = context.oncalls.map(o => o.user.summary)
-    var summaryLink = context.service.html_url
-    var message = `On-call for *${context.service.name}*: ${onCallNames}`
-    const logo = "https://user-images.githubusercontent.com/27153/90803915-4fe88400-e2ce-11ea-803f-47b9c244799d.png"
-    return {
-        status,
-        message,
-        summaryLink,
-        logo
+    try {
+        const context = await getApiContext({token, service})
+        var onCallNames = context.oncalls.map(o => o.user.summary)
+        var summaryLink = context.service.html_url
+        var message = `On-call for *${context.service.name}*: ${onCallNames}`
+        return {
+            status : "unknown",
+            message,
+            summaryLink,
+            logo   : ICON_IMG
+        }
+    } catch (e) {
+        return {
+            status      : "unknown",
+            message     : `PagerDuty API Error: ${e.message}`,
+            summaryLink : "http://www.pagerduty.com",
+            logo        : ICON_IMG
+        }
     }
+
 }
 
 
@@ -12755,6 +12784,10 @@ const ROLLBAR_API = 'https://api.rollbar.com'
 const getApiContext = async ({token, environment}) => {
     const HEADERS = { "X-Rollbar-Access-Token" : token }
     const deployResponse = await fetch(`${ROLLBAR_API}/api/1/deploys`, { headers : HEADERS })
+    if (deployResponse.status !== 200) {
+        throw new Error(`Rollbar API Error: ${deployResponse.status}`)
+    }
+
     const deploys = await deployResponse.json()
 
     if (deploys.err === 1) {
@@ -12777,53 +12810,60 @@ const getApiContext = async ({token, environment}) => {
     return versions.result
 }
 
+const ICON_IMG = "https://user-images.githubusercontent.com/27153/90803304-65a97980-e2cd-11ea-8267-a711fdcc6bc9.png"
+
 exports.getSummary = async ({token, yamlConfig}) => {
     const { environment, account, project } = yamlConfig
-    const context = await getApiContext({token, environment})
-    // todo: handle error case
 
-    if (context === null) {
+    try {
+        const context = await getApiContext({token, environment})
+        if (context === null) {
+            return {
+
+            }
+        }
+        var status = "unknown"
+        var message = "Rollbar data unavailable"
+        const details = [
+            {
+                message : `Version ${context.version} has ${context.item_stats.new.critical} critical errors.`
+            }
+        ]
+
+        const errors = context.item_stats.new.error
+        if (errors > 0) {
+            status = "warn"
+            message = "New errors have been detected since last deploy"
+        }
+
+        const critical = context.item_stats.new.critical
+        if (critical > 0) {
+            status = "error"
+            message = "New critical errors have been detected since last deploy"
+        }
+
+        if (errors + critical === 0) {
+            status = "ok"
+            message = "No new errors detected since last deploy"
+        }
+
+        // eslint-disable-next-line max-len
+        const summaryLink = `https://rollbar.com/${account}/${project}/versions/${environment}/${context.version}`
+
+        return {
+            status,
+            message,
+            summaryLink,
+            details,
+            context,
+            logo : ICON_IMG
+        }
+    } catch (e) {
         return {
             "status"  : "unknown",
-            "message" : "Rollbar data unavailable"
+            "message" : `Rollbar API Error: ${e.message}`,
+            logo      : ICON_IMG,
         }
-    }
-    var status = "unknown"
-    var message = "Rollbar data unavailable"
-    const logo = "https://user-images.githubusercontent.com/27153/90803304-65a97980-e2cd-11ea-8267-a711fdcc6bc9.png"
-    const details = [
-        {
-            message : `Version ${context.version} has ${context.item_stats.new.critical} critical errors.`
-        }
-    ]
-
-    const errors = context.item_stats.new.error
-    if (errors > 0) {
-        status = "warn"
-        message = "New errors have been detected since last deploy"
-    }
-
-    const critical = context.item_stats.new.critical
-    if (critical > 0) {
-        status = "error"
-        message = "New critical errors have been detected since last deploy"
-    }
-
-    if (errors + critical === 0) {
-        status = "ok"
-        message = "No new errors detected since last deploy"
-    }
-
-    // eslint-disable-next-line max-len
-    const summaryLink = `https://rollbar.com/${account}/${project}/versions/${environment}/${context.version}`
-
-    return {
-        status,
-        message,
-        summaryLink,
-        details,
-        context,
-        logo
     }
 }
 
