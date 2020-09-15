@@ -104,10 +104,18 @@ This action reads configuration from a special file you add to the root of your 
 
 Here's an example `.lightstep.yml` file that specifies PagerDuty and Rollbar-specific configuration: 
 
+Optionally, you can specify a list of condition ids to check status of the project with. The default behavior is to check *all* conditions on the project.
+
 ```yaml
 organization: -13ac9ef7
 project: hipster-shop
 
+# optional - specifiy specific conditions to check
+conditions:
+  - YfDzWxGL
+  - gLFxv0B1
+
+# optional integrations
 integrations:
   rollbar:
     environment: production
