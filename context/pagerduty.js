@@ -29,20 +29,29 @@ const getApiContext = async ({token, service}) => {
     }
 }
 
+const ICON_IMG = "https://user-images.githubusercontent.com/27153/90803915-4fe88400-e2ce-11ea-803f-47b9c244799d.png"
+
 exports.getSummary = async ({token, yamlConfig}) => {
     const { service } = yamlConfig
-    const context = await getApiContext({token, service})
-    // todo: handle error case
 
-    var status = "unknown"
-    var onCallNames = context.oncalls.map(o => o.user.summary)
-    var summaryLink = context.service.html_url
-    var message = `On-call for *${context.service.name}*: ${onCallNames}`
-    const logo = "https://user-images.githubusercontent.com/27153/90803915-4fe88400-e2ce-11ea-803f-47b9c244799d.png"
-    return {
-        status,
-        message,
-        summaryLink,
-        logo
+    try {
+        const context = await getApiContext({token, service})
+        var onCallNames = context.oncalls.map(o => o.user.summary)
+        var summaryLink = context.service.html_url
+        var message = `On-call for *${context.service.name}*: ${onCallNames}`
+        return {
+            status : "unknown",
+            message,
+            summaryLink,
+            logo   : ICON_IMG
+        }
+    } catch (e) {
+        return {
+            status      : "unknown",
+            message     : `PagerDuty API Error: ${e.message}`,
+            summaryLink : "http://www.pagerduty.com",
+            logo        : ICON_IMG
+        }
     }
+
 }
