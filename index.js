@@ -2,6 +2,7 @@ const core = require('@actions/core')
 
 const path = require('path')
 const fs = require('fs')
+const assert = require('assert')
 const template = require('lodash.template')
 const config = require('./config')
 
@@ -41,8 +42,9 @@ const resolveActionInput = (name, config = {}) => {
  */
 const assertActionInput = (name, config) => {
     if (!resolveActionInput(name, config)) {
-        core.setFailed(
-            `Input ${name} must be set as an env var, passed as an action input, or specified in .lightstep.yml`)
+        const msg = `Input ${name} must be set as an env var, passed as an action input, or specified in .lightstep.yml`
+        core.setFailed(msg)
+        assert.fail(msg)
     }
 }
 
@@ -104,8 +106,6 @@ async function run() {
         core.setOutput('lightstep_predeploy_status', templateContext.status)
         core.setOutput('lightstep_predeploy_md', markdown)
     } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error(error)
         core.setFailed(error.message)
     }
 }

@@ -1,5 +1,7 @@
 const lightstepSdk = require('lightstep-js-sdk')
 
+const LIGHTSTEP_WEB_HOST = 'app.lightstep.com'
+
 const getApiContext = async ({lightstepProj, lightstepOrg, lightstepToken}) => {
     const apiClient = await lightstepSdk.init(lightstepOrg, lightstepToken)
 
@@ -26,38 +28,47 @@ const getApiContext = async ({lightstepProj, lightstepOrg, lightstepToken}) => {
     return conditionStatuses
 }
 
+const ICON_IMG = "https://user-images.githubusercontent.com/27153/90803298-6510e300-e2cd-11ea-91fa-5795a4481e20.png"
+
 exports.getSummary = async ({lightstepProj, lightstepOrg, lightstepToken}) => {
-    const context = await getApiContext({lightstepProj, lightstepOrg, lightstepToken})
+    try {
+        const context = await getApiContext({lightstepProj, lightstepOrg, lightstepToken})
 
-    // todo: handle error case + no conditions
+        // todo: handle no conditions
 
-    var status = "unknown"
-    var message = "Condition status is unknown"
-    const logo = "https://user-images.githubusercontent.com/27153/90803298-6510e300-e2cd-11ea-91fa-5795a4481e20.png"
-    const details = context.map(c => {
-        return { message : `${c.name}: ${c.state}` }
-    })
-    const summaryLink = `https://app.lightstep.com/${lightstepProj}/monitoring/conditions`
-    const noViolations = context.filter(c => c.state === 'false')
-    const violated = context.filter(c => c.state === 'true')
+        var status = "unknown"
+        var message = "Condition status is unknown"
+        const details = context.map(c => {
+            return { message : `${c.name}: ${c.state}` }
+        })
+        const summaryLink = `https://${LIGHTSTEP_WEB_HOST}/${lightstepProj}/monitoring/conditions`
+        const noViolations = context.filter(c => c.state === 'false')
+        const violated = context.filter(c => c.state === 'true')
 
-    if (noViolations.length === context.length) {
-        status = "ok"
-        message = "No conditions have violations"
+        if (noViolations.length === context.length) {
+            status = "ok"
+            message = "No conditions have violations"
+        } else if (violated.length > 1) {
+            status = "error"
+            message = "Condition(s) have violations"
+        }
+
+        return {
+            status,
+            message,
+            summaryLink,
+            details,
+            context,
+            logo : ICON_IMG
+        }
+    } catch (e) {
+        return {
+            status      : "unknown",
+            message     : `Lightstep API Error: ${e.message}`,
+            summaryLink : "https://lightstep.com",
+            details     : [],
+            logo        : ICON_IMG
+        }
     }
 
-
-    if (violated.length > 1) {
-        status = "error"
-        message = "Condition(s) have violations"
-    }
-
-    return {
-        status,
-        message,
-        summaryLink,
-        details,
-        context,
-        logo
-    }
 }
