@@ -1,6 +1,10 @@
 name: 'Lightstep Pre-Deploy Check'
 author: 'Lightstep, Inc.'
-description: 'Checks health of production environment before deploy'
+description: 'View service health, reported errors, and on-call information in pull requests.'
+
+branding:
+  icon: 'alert-triangle'
+  color: 'green'
 
 inputs:
   lightstep_organization:

@@ -1,6 +1,6 @@
 # lightstep-action-predeploy
 
-The `lightstep/lightstep-action-predeploy` action provides insight into the health of production service(s) during software delivery. 
+The `lightstep/lightstep-action-predeploy` action provides insight into the health of production service(s) during software delivery alongside on-call and error information. 
 
 This Javascript-based action can be used when a pull request is approved by GitHub reviewers and uses APIs to provide a summary of deployment risk ahead of a code change going to a production environment.
 
