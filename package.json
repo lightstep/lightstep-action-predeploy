@@ -13,7 +13,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@actions/core": "^1.2.5",
+    "@actions/core": "^1.2.6",
     "@actions/github": "^4.0.0",
     "js-yaml": "^3.14.0",
     "lightstep-js-sdk": "git+ssh://git@github.com/lightstep/lightstep-js-sdk.git",
