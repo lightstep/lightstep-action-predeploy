@@ -135,6 +135,14 @@ integrations:
 
 * `lightstep_predeploy_status` - Status of pre-deploy checks: `ok`, `warn`, `error` or `unknown`
 
+## Running locally
+
+## Notes
+
+This action does not automatically generate a pull request comment after running.
+
+To add the output of this action to generate a pull request comment, use the `lightstep_predeploy_md` output with another action like [`unsplash/comment-on-pr`](https://github.com/unsplash/comment-on-pr/).
+
 ## License
 
 Apache License 2.0

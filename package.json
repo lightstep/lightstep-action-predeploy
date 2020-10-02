@@ -1,7 +1,7 @@
 {
-  "name": "lightstep-predeploy",
+  "name": "lightstep-action-predeploy",
   "version": "0.1.4",
-  "description": "",
+  "description": "GitHub Action to see service health, reported errors, and on-call information in pull requests.",
   "main": "index.js",
   "scripts": {
     "lint": "eslint .",
