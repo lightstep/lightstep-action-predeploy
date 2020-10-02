@@ -1,7 +1,7 @@
 {
-  "name": "lightstep-predeploy",
-  "version": "0.1.3",
-  "description": "",
+  "name": "lightstep-action-predeploy",
+  "version": "0.1.4",
+  "description": "GitHub Action to see service health, reported errors, and on-call information in pull requests.",
   "main": "index.js",
   "scripts": {
     "lint": "eslint .",
@@ -13,12 +13,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@actions/core": "^1.2.5",
+    "@actions/core": "^1.2.6",
     "@actions/github": "^4.0.0",
     "js-yaml": "^3.14.0",
-    "lightstep-js-sdk": "git+ssh://git@github.com/lightstep/lightstep-js-sdk.git",
+    "lightstep-js-sdk": "git://github.com/lightstep/lightstep-js-sdk.git",
     "lodash.template": "^4.5.0",
-    "node-fetch": "^2.6.0"
+    "node-fetch": "^2.6.1"
   },
   "devDependencies": {
     "@zeit/ncc": "^0.22.3",

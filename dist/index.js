@@ -1702,98 +1702,28 @@ module.exports = mapCacheDelete;
 /* 80 */,
 /* 81 */,
 /* 82 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
+/***/ (function(__unusedmodule, exports) {
 
 "use strict";
 
-
-var Type = __webpack_require__(945);
-
-var YAML_DATE_REGEXP = new RegExp(
-  '^([0-9][0-9][0-9][0-9])'          + // [1] year
-  '-([0-9][0-9])'                    + // [2] month
-  '-([0-9][0-9])$');                   // [3] day
-
-var YAML_TIMESTAMP_REGEXP = new RegExp(
-  '^([0-9][0-9][0-9][0-9])'          + // [1] year
-  '-([0-9][0-9]?)'                   + // [2] month
-  '-([0-9][0-9]?)'                   + // [3] day
-  '(?:[Tt]|[ \\t]+)'                 + // ...
-  '([0-9][0-9]?)'                    + // [4] hour
-  ':([0-9][0-9])'                    + // [5] minute
-  ':([0-9][0-9])'                    + // [6] second
-  '(?:\\.([0-9]*))?'                 + // [7] fraction
-  '(?:[ \\t]*(Z|([-+])([0-9][0-9]?)' + // [8] tz [9] tz_sign [10] tz_hour
-  '(?::([0-9][0-9]))?))?$');           // [11] tz_minute
-
-function resolveYamlTimestamp(data) {
-  if (data === null) return false;
-  if (YAML_DATE_REGEXP.exec(data) !== null) return true;
-  if (YAML_TIMESTAMP_REGEXP.exec(data) !== null) return true;
-  return false;
-}
-
-function constructYamlTimestamp(data) {
-  var match, year, month, day, hour, minute, second, fraction = 0,
-      delta = null, tz_hour, tz_minute, date;
-
-  match = YAML_DATE_REGEXP.exec(data);
-  if (match === null) match = YAML_TIMESTAMP_REGEXP.exec(data);
-
-  if (match === null) throw new Error('Date resolve error');
-
-  // match: [1] year [2] month [3] day
-
-  year = +(match[1]);
-  month = +(match[2]) - 1; // JS month starts with 0
-  day = +(match[3]);
-
-  if (!match[4]) { // no hour
-    return new Date(Date.UTC(year, month, day));
-  }
-
-  // match: [4] hour [5] minute [6] second [7] fraction
-
-  hour = +(match[4]);
-  minute = +(match[5]);
-  second = +(match[6]);
-
-  if (match[7]) {
-    fraction = match[7].slice(0, 3);
-    while (fraction.length < 3) { // milli-seconds
-      fraction += '0';
+// We use any as a valid input type
+/* eslint-disable @typescript-eslint/no-explicit-any */
+Object.defineProperty(exports, "__esModule", { value: true });
+/**
+ * Sanitizes an input into a string so it can be passed into issueCommand safely
+ * @param input input to sanitize into a string
+ */
+function toCommandValue(input) {
+    if (input === null || input === undefined) {
+        return '';
     }
-    fraction = +fraction;
-  }
-
-  // match: [8] tz [9] tz_sign [10] tz_hour [11] tz_minute
-
-  if (match[9]) {
-    tz_hour = +(match[10]);
-    tz_minute = +(match[11] || 0);
-    delta = (tz_hour * 60 + tz_minute) * 60000; // delta in mili-seconds
-    if (match[9] === '-') delta = -delta;
-  }
-
-  date = new Date(Date.UTC(year, month, day, hour, minute, second, fraction));
-
-  if (delta) date.setTime(date.getTime() - delta);
-
-  return date;
+    else if (typeof input === 'string' || input instanceof String) {
+        return input;
+    }
+    return JSON.stringify(input);
 }
-
-function representYamlTimestamp(object /*, style*/) {
-  return object.toISOString();
-}
-
-module.exports = new Type('tag:yaml.org,2002:timestamp', {
-  kind: 'scalar',
-  resolve: resolveYamlTimestamp,
-  construct: constructYamlTimestamp,
-  instanceOf: Date,
-  represent: representYamlTimestamp
-});
-
+exports.toCommandValue = toCommandValue;
+//# sourceMappingURL=utils.js.map
 
 /***/ }),
 /* 83 */
@@ -2253,451 +2183,34 @@ module.exports = new Type('tag:yaml.org,2002:set', {
 
 "use strict";
 
-
-exports.__esModule = true;
-exports.default = mapSpec;
-exports.plugins = exports.SpecMap = void 0;
-
-var _find = _interopRequireDefault(__webpack_require__(84));
-
-var _noop = _interopRequireDefault(__webpack_require__(439));
-
-var _lib = _interopRequireDefault(__webpack_require__(303));
-
-var _refs = _interopRequireDefault(__webpack_require__(217));
-
-var _allOf = _interopRequireDefault(__webpack_require__(181));
-
-var _parameters = _interopRequireDefault(__webpack_require__(353));
-
-var _properties = _interopRequireDefault(__webpack_require__(693));
-
-var _contextTree = _interopRequireDefault(__webpack_require__(88));
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-function ownKeys(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); keys.push.apply(keys, symbols); } return keys; }
-
-function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i] != null ? arguments[i] : {}; if (i % 2) { ownKeys(Object(source), true).forEach(function (key) { _defineProperty(target, key, source[key]); }); } else if (Object.getOwnPropertyDescriptors) { Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)); } else { ownKeys(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } } return target; }
-
-function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
-
-const HARD_LIMIT = 100;
-
-class SpecMap {
-  static getPluginName(plugin) {
-    return plugin.pluginName;
-  }
-
-  static getPatchesOfType(patches, fn) {
-    return patches.filter(fn);
-  }
-
-  constructor(opts) {
-    Object.assign(this, {
-      spec: '',
-      debugLevel: 'info',
-      plugins: [],
-      pluginHistory: {},
-      errors: [],
-      mutations: [],
-      promisedPatches: [],
-      state: {},
-      patches: [],
-      context: {},
-      contextTree: new _contextTree.default(),
-      showDebug: false,
-      allPatches: [],
-      // only populated if showDebug is true
-      pluginProp: 'specMap',
-      libMethods: Object.assign(Object.create(this), _lib.default, {
-        getInstance: () => this
-      }),
-      allowMetaPatches: false
-    }, opts); // Lib methods bound
-
-    this.get = this._get.bind(this); // eslint-disable-line no-underscore-dangle
-
-    this.getContext = this._getContext.bind(this); // eslint-disable-line no-underscore-dangle
-
-    this.hasRun = this._hasRun.bind(this); // eslint-disable-line no-underscore-dangle
-
-    this.wrappedPlugins = this.plugins.map(this.wrapPlugin.bind(this)).filter(_lib.default.isFunction); // Initial patch(s)
-
-    this.patches.push(_lib.default.add([], this.spec));
-    this.patches.push(_lib.default.context([], this.context));
-    this.updatePatches(this.patches);
-  }
-
-  debug(level, ...args) {
-    if (this.debugLevel === level) {
-      console.log(...args); // eslint-disable-line no-console
-    }
-  }
-
-  verbose(header, ...args) {
-    if (this.debugLevel === 'verbose') {
-      console.log(`[${header}]   `, ...args); // eslint-disable-line no-console
-    }
-  }
-
-  wrapPlugin(plugin, name) {
-    const {
-      pathDiscriminator
-    } = this;
-    let ctx = null;
-    let fn;
-
-    if (plugin[this.pluginProp]) {
-      ctx = plugin;
-      fn = plugin[this.pluginProp];
-    } else if (_lib.default.isFunction(plugin)) {
-      fn = plugin;
-    } else if (_lib.default.isObject(plugin)) {
-      fn = createKeyBasedPlugin(plugin);
-    }
-
-    return Object.assign(fn.bind(ctx), {
-      pluginName: plugin.name || name,
-      isGenerator: _lib.default.isGenerator(fn)
-    }); // Expected plugin interface: {key: string, plugin: fn*}
-    // This traverses depth-first and immediately applies yielded patches.
-    // This strategy should work well for most plugins (including the built-ins).
-    // We might consider making this (traversing & application) configurable later.
-
-    function createKeyBasedPlugin(pluginObj) {
-      const isSubPath = (path, tested) => {
-        if (!Array.isArray(path)) {
-          return true;
-        }
-
-        return path.every((val, i) => {
-          return val === tested[i];
-        });
-      };
-
-      return function* generator(patches, specmap) {
-        const refCache = {}; // eslint-disable-next-line no-restricted-syntax
-
-        for (const patch of patches.filter(_lib.default.isAdditiveMutation)) {
-          yield* traverse(patch.value, patch.path, patch);
-        }
-
-        function* traverse(obj, path, patch) {
-          if (!_lib.default.isObject(obj)) {
-            if (pluginObj.key === path[path.length - 1]) {
-              yield pluginObj.plugin(obj, pluginObj.key, path, specmap);
-            }
-          } else {
-            const parentIndex = path.length - 1;
-            const parent = path[parentIndex];
-            const indexOfFirstProperties = path.indexOf('properties');
-            const isRootProperties = parent === 'properties' && parentIndex === indexOfFirstProperties;
-            const traversed = specmap.allowMetaPatches && refCache[obj.$$ref]; // eslint-disable-next-line no-restricted-syntax
-
-            for (const key of Object.keys(obj)) {
-              const val = obj[key];
-              const updatedPath = path.concat(key);
-
-              const isObj = _lib.default.isObject(val);
-
-              const objRef = obj.$$ref;
-
-              if (!traversed) {
-                if (isObj) {
-                  // Only store the ref if it exists
-                  if (specmap.allowMetaPatches && objRef) {
-                    refCache[objRef] = true;
-                  }
-
-                  yield* traverse(val, updatedPath, patch);
-                }
-              }
-
-              if (!isRootProperties && key === pluginObj.key) {
-                const isWithinPathDiscriminator = isSubPath(pathDiscriminator, path);
-
-                if (!pathDiscriminator || isWithinPathDiscriminator) {
-                  yield pluginObj.plugin(val, key, updatedPath, specmap, patch);
-                }
-              }
-            }
-          }
-        }
-      };
-    }
-  }
-
-  nextPlugin() {
-    // Array.prototype.find doesn't work in IE 11 :(
-    return (0, _find.default)(this.wrappedPlugins, plugin => {
-      const mutations = this.getMutationsForPlugin(plugin);
-      return mutations.length > 0;
-    });
-  }
-
-  nextPromisedPatch() {
-    if (this.promisedPatches.length > 0) {
-      return Promise.race(this.promisedPatches.map(patch => patch.value));
-    }
-
-    return undefined;
-  }
-
-  getPluginHistory(plugin) {
-    const name = this.constructor.getPluginName(plugin);
-    return this.pluginHistory[name] || [];
-  }
-
-  getPluginRunCount(plugin) {
-    return this.getPluginHistory(plugin).length;
-  }
-
-  getPluginHistoryTip(plugin) {
-    const history = this.getPluginHistory(plugin);
-    const val = history && history[history.length - 1];
-    return val || {};
-  }
-
-  getPluginMutationIndex(plugin) {
-    const mi = this.getPluginHistoryTip(plugin).mutationIndex;
-    return typeof mi !== 'number' ? -1 : mi;
-  }
-
-  updatePluginHistory(plugin, val) {
-    const name = this.constructor.getPluginName(plugin);
-    this.pluginHistory[name] = this.pluginHistory[name] || [];
-    this.pluginHistory[name].push(val);
-  }
-
-  updatePatches(patches) {
-    _lib.default.normalizeArray(patches).forEach(patch => {
-      if (patch instanceof Error) {
-        this.errors.push(patch);
-        return;
-      }
-
-      try {
-        if (!_lib.default.isObject(patch)) {
-          this.debug('updatePatches', 'Got a non-object patch', patch);
-          return;
-        }
-
-        if (this.showDebug) {
-          this.allPatches.push(patch);
-        }
-
-        if (_lib.default.isPromise(patch.value)) {
-          this.promisedPatches.push(patch);
-          this.promisedPatchThen(patch);
-          return;
-        }
-
-        if (_lib.default.isContextPatch(patch)) {
-          this.setContext(patch.path, patch.value);
-          return;
-        }
-
-        if (_lib.default.isMutation(patch)) {
-          this.updateMutations(patch);
-          return;
-        }
-      } catch (e) {
-        console.error(e); // eslint-disable-line no-console
-
-        this.errors.push(e);
-      }
-    });
-  }
-
-  updateMutations(patch) {
-    if (typeof patch.value === 'object' && !Array.isArray(patch.value) && this.allowMetaPatches) {
-      patch.value = _objectSpread({}, patch.value);
-    }
-
-    const result = _lib.default.applyPatch(this.state, patch, {
-      allowMetaPatches: this.allowMetaPatches
-    });
-
-    if (result) {
-      this.mutations.push(patch);
-      this.state = result;
-    }
-  }
-
-  removePromisedPatch(patch) {
-    const index = this.promisedPatches.indexOf(patch);
-
-    if (index < 0) {
-      this.debug("Tried to remove a promisedPatch that isn't there!");
-      return;
-    }
-
-    this.promisedPatches.splice(index, 1);
-  }
-
-  promisedPatchThen(patch) {
-    patch.value = patch.value.then(val => {
-      const promisedPatch = _objectSpread(_objectSpread({}, patch), {}, {
-        value: val
-      });
-
-      this.removePromisedPatch(patch);
-      this.updatePatches(promisedPatch);
-    }).catch(e => {
-      this.removePromisedPatch(patch);
-      this.updatePatches(e);
-    });
-    return patch.value;
-  }
-
-  getMutations(from, to) {
-    from = from || 0;
-
-    if (typeof to !== 'number') {
-      to = this.mutations.length;
-    }
-
-    return this.mutations.slice(from, to);
-  }
-
-  getCurrentMutations() {
-    return this.getMutationsForPlugin(this.getCurrentPlugin());
-  }
-
-  getMutationsForPlugin(plugin) {
-    const tip = this.getPluginMutationIndex(plugin);
-    return this.getMutations(tip + 1);
-  }
-
-  getCurrentPlugin() {
-    return this.currentPlugin;
-  }
-
-  getLib() {
-    return this.libMethods;
-  } // eslint-disable-next-line no-underscore-dangle
-
-
-  _get(path) {
-    return _lib.default.getIn(this.state, path);
-  } // eslint-disable-next-line no-underscore-dangle
-
-
-  _getContext(path) {
-    return this.contextTree.get(path);
-  }
-
-  setContext(path, value) {
-    return this.contextTree.set(path, value);
-  } // eslint-disable-next-line no-underscore-dangle
-
-
-  _hasRun(count) {
-    const times = this.getPluginRunCount(this.getCurrentPlugin());
-    return times > (count || 0);
-  }
-
-  dispatch() {
-    const that = this;
-    const plugin = this.nextPlugin();
-
-    if (!plugin) {
-      const nextPromise = this.nextPromisedPatch();
-
-      if (nextPromise) {
-        return nextPromise.then(() => this.dispatch()).catch(() => this.dispatch());
-      } // We're done!
-
-
-      const result = {
-        spec: this.state,
-        errors: this.errors
-      };
-
-      if (this.showDebug) {
-        result.patches = this.allPatches;
-      }
-
-      return Promise.resolve(result);
-    } // Makes sure plugin isn't running an endless loop
-
-
-    that.pluginCount = that.pluginCount || {};
-    that.pluginCount[plugin] = (that.pluginCount[plugin] || 0) + 1;
-
-    if (that.pluginCount[plugin] > HARD_LIMIT) {
-      return Promise.resolve({
-        spec: that.state,
-        errors: that.errors.concat(new Error(`We've reached a hard limit of ${HARD_LIMIT} plugin runs`))
-      });
-    } // A different plugin runs, wait for all promises to resolve, then retry
-
-
-    if (plugin !== this.currentPlugin && this.promisedPatches.length) {
-      const promises = this.promisedPatches.map(p => p.value); // Waits for all to settle instead of Promise.all which stops on rejection
-
-      return Promise.all(promises.map(promise => {
-        return promise.then(_noop.default, _noop.default);
-      })).then(() => this.dispatch());
-    } // Ok, run the plugin
-
-
-    return executePlugin();
-
-    function executePlugin() {
-      that.currentPlugin = plugin;
-      const mutations = that.getCurrentMutations();
-      const lastMutationIndex = that.mutations.length - 1;
-
-      try {
-        if (plugin.isGenerator) {
-          // eslint-disable-next-line no-restricted-syntax
-          for (const yieldedPatches of plugin(mutations, that.getLib())) {
-            updatePatches(yieldedPatches);
-          }
-        } else {
-          const newPatches = plugin(mutations, that.getLib());
-          updatePatches(newPatches);
-        }
-      } catch (e) {
-        console.error(e); // eslint-disable-line no-console
-
-        updatePatches([Object.assign(Object.create(e), {
-          plugin
-        })]);
-      } finally {
-        that.updatePluginHistory(plugin, {
-          mutationIndex: lastMutationIndex
-        });
-      }
-
-      return that.dispatch();
-    }
-
-    function updatePatches(patches) {
-      if (patches) {
-        patches = _lib.default.fullyNormalizeArray(patches);
-        that.updatePatches(patches, plugin);
-      }
-    }
-  }
-
-}
-
-exports.SpecMap = SpecMap;
-
-function mapSpec(opts) {
-  return new SpecMap(opts).dispatch();
-}
-
-const plugins = {
-  refs: _refs.default,
-  allOf: _allOf.default,
-  parameters: _parameters.default,
-  properties: _properties.default
+// For internal use, subject to change.
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
 };
-exports.plugins = plugins;
+Object.defineProperty(exports, "__esModule", { value: true });
+// We use any as a valid input type
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const fs = __importStar(__webpack_require__(747));
+const os = __importStar(__webpack_require__(87));
+const utils_1 = __webpack_require__(82);
+function issueCommand(command, message) {
+    const filePath = process.env[`GITHUB_${command}`];
+    if (!filePath) {
+        throw new Error(`Unable to find environment variable for file command ${command}`);
+    }
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`Missing file at path: ${filePath}`);
+    }
+    fs.appendFileSync(filePath, `${utils_1.toCommandValue(message)}${os.EOL}`, {
+        encoding: 'utf8'
+    });
+}
+exports.issueCommand = issueCommand;
+//# sourceMappingURL=file-command.js.map
 
 /***/ }),
 /* 103 */,
@@ -7536,6 +7049,8 @@ var _traverse = _interopRequireDefault(__webpack_require__(721));
 
 var _url = _interopRequireDefault(__webpack_require__(835));
 
+var _isString = _interopRequireDefault(__webpack_require__(444));
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 // This will match if the direct parent's key exactly matches an item.
@@ -7572,7 +7087,7 @@ function generateAbsoluteRefPatches(obj, basePath, {
 } = {}) {
   const patches = [];
   (0, _traverse.default)(obj).forEach(function callback() {
-    if (targetKeys.indexOf(this.key) > -1) {
+    if (targetKeys.includes(this.key) && (0, _isString.default)(this.node)) {
       const nodePath = this.path; // this node's path, relative to `obj`
 
       const fullPath = basePath.concat(this.path);
@@ -8754,7 +8269,458 @@ module.exports = new Type('tag:yaml.org,2002:float', {
 /***/ }),
 /* 418 */,
 /* 419 */,
-/* 420 */,
+/* 420 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+
+exports.__esModule = true;
+exports.default = mapSpec;
+exports.plugins = exports.SpecMap = void 0;
+
+var _find = _interopRequireDefault(__webpack_require__(84));
+
+var _noop = _interopRequireDefault(__webpack_require__(439));
+
+var _lib = _interopRequireDefault(__webpack_require__(303));
+
+var _refs = _interopRequireDefault(__webpack_require__(217));
+
+var _allOf = _interopRequireDefault(__webpack_require__(181));
+
+var _parameters = _interopRequireDefault(__webpack_require__(353));
+
+var _properties = _interopRequireDefault(__webpack_require__(693));
+
+var _contextTree = _interopRequireDefault(__webpack_require__(88));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function ownKeys(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); keys.push.apply(keys, symbols); } return keys; }
+
+function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i] != null ? arguments[i] : {}; if (i % 2) { ownKeys(Object(source), true).forEach(function (key) { _defineProperty(target, key, source[key]); }); } else if (Object.getOwnPropertyDescriptors) { Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)); } else { ownKeys(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } } return target; }
+
+function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
+const HARD_LIMIT = 100;
+
+class SpecMap {
+  static getPluginName(plugin) {
+    return plugin.pluginName;
+  }
+
+  static getPatchesOfType(patches, fn) {
+    return patches.filter(fn);
+  }
+
+  constructor(opts) {
+    Object.assign(this, {
+      spec: '',
+      debugLevel: 'info',
+      plugins: [],
+      pluginHistory: {},
+      errors: [],
+      mutations: [],
+      promisedPatches: [],
+      state: {},
+      patches: [],
+      context: {},
+      contextTree: new _contextTree.default(),
+      showDebug: false,
+      allPatches: [],
+      // only populated if showDebug is true
+      pluginProp: 'specMap',
+      libMethods: Object.assign(Object.create(this), _lib.default, {
+        getInstance: () => this
+      }),
+      allowMetaPatches: false
+    }, opts); // Lib methods bound
+
+    this.get = this._get.bind(this); // eslint-disable-line no-underscore-dangle
+
+    this.getContext = this._getContext.bind(this); // eslint-disable-line no-underscore-dangle
+
+    this.hasRun = this._hasRun.bind(this); // eslint-disable-line no-underscore-dangle
+
+    this.wrappedPlugins = this.plugins.map(this.wrapPlugin.bind(this)).filter(_lib.default.isFunction); // Initial patch(s)
+
+    this.patches.push(_lib.default.add([], this.spec));
+    this.patches.push(_lib.default.context([], this.context));
+    this.updatePatches(this.patches);
+  }
+
+  debug(level, ...args) {
+    if (this.debugLevel === level) {
+      console.log(...args); // eslint-disable-line no-console
+    }
+  }
+
+  verbose(header, ...args) {
+    if (this.debugLevel === 'verbose') {
+      console.log(`[${header}]   `, ...args); // eslint-disable-line no-console
+    }
+  }
+
+  wrapPlugin(plugin, name) {
+    const {
+      pathDiscriminator
+    } = this;
+    let ctx = null;
+    let fn;
+
+    if (plugin[this.pluginProp]) {
+      ctx = plugin;
+      fn = plugin[this.pluginProp];
+    } else if (_lib.default.isFunction(plugin)) {
+      fn = plugin;
+    } else if (_lib.default.isObject(plugin)) {
+      fn = createKeyBasedPlugin(plugin);
+    }
+
+    return Object.assign(fn.bind(ctx), {
+      pluginName: plugin.name || name,
+      isGenerator: _lib.default.isGenerator(fn)
+    }); // Expected plugin interface: {key: string, plugin: fn*}
+    // This traverses depth-first and immediately applies yielded patches.
+    // This strategy should work well for most plugins (including the built-ins).
+    // We might consider making this (traversing & application) configurable later.
+
+    function createKeyBasedPlugin(pluginObj) {
+      const isSubPath = (path, tested) => {
+        if (!Array.isArray(path)) {
+          return true;
+        }
+
+        return path.every((val, i) => {
+          return val === tested[i];
+        });
+      };
+
+      return function* generator(patches, specmap) {
+        const refCache = {}; // eslint-disable-next-line no-restricted-syntax
+
+        for (const patch of patches.filter(_lib.default.isAdditiveMutation)) {
+          yield* traverse(patch.value, patch.path, patch);
+        }
+
+        function* traverse(obj, path, patch) {
+          if (!_lib.default.isObject(obj)) {
+            if (pluginObj.key === path[path.length - 1]) {
+              yield pluginObj.plugin(obj, pluginObj.key, path, specmap);
+            }
+          } else {
+            const parentIndex = path.length - 1;
+            const parent = path[parentIndex];
+            const indexOfFirstProperties = path.indexOf('properties');
+            const isRootProperties = parent === 'properties' && parentIndex === indexOfFirstProperties;
+            const traversed = specmap.allowMetaPatches && refCache[obj.$$ref]; // eslint-disable-next-line no-restricted-syntax
+
+            for (const key of Object.keys(obj)) {
+              const val = obj[key];
+              const updatedPath = path.concat(key);
+
+              const isObj = _lib.default.isObject(val);
+
+              const objRef = obj.$$ref;
+
+              if (!traversed) {
+                if (isObj) {
+                  // Only store the ref if it exists
+                  if (specmap.allowMetaPatches && objRef) {
+                    refCache[objRef] = true;
+                  }
+
+                  yield* traverse(val, updatedPath, patch);
+                }
+              }
+
+              if (!isRootProperties && key === pluginObj.key) {
+                const isWithinPathDiscriminator = isSubPath(pathDiscriminator, path);
+
+                if (!pathDiscriminator || isWithinPathDiscriminator) {
+                  yield pluginObj.plugin(val, key, updatedPath, specmap, patch);
+                }
+              }
+            }
+          }
+        }
+      };
+    }
+  }
+
+  nextPlugin() {
+    // Array.prototype.find doesn't work in IE 11 :(
+    return (0, _find.default)(this.wrappedPlugins, plugin => {
+      const mutations = this.getMutationsForPlugin(plugin);
+      return mutations.length > 0;
+    });
+  }
+
+  nextPromisedPatch() {
+    if (this.promisedPatches.length > 0) {
+      return Promise.race(this.promisedPatches.map(patch => patch.value));
+    }
+
+    return undefined;
+  }
+
+  getPluginHistory(plugin) {
+    const name = this.constructor.getPluginName(plugin);
+    return this.pluginHistory[name] || [];
+  }
+
+  getPluginRunCount(plugin) {
+    return this.getPluginHistory(plugin).length;
+  }
+
+  getPluginHistoryTip(plugin) {
+    const history = this.getPluginHistory(plugin);
+    const val = history && history[history.length - 1];
+    return val || {};
+  }
+
+  getPluginMutationIndex(plugin) {
+    const mi = this.getPluginHistoryTip(plugin).mutationIndex;
+    return typeof mi !== 'number' ? -1 : mi;
+  }
+
+  updatePluginHistory(plugin, val) {
+    const name = this.constructor.getPluginName(plugin);
+    this.pluginHistory[name] = this.pluginHistory[name] || [];
+    this.pluginHistory[name].push(val);
+  }
+
+  updatePatches(patches) {
+    _lib.default.normalizeArray(patches).forEach(patch => {
+      if (patch instanceof Error) {
+        this.errors.push(patch);
+        return;
+      }
+
+      try {
+        if (!_lib.default.isObject(patch)) {
+          this.debug('updatePatches', 'Got a non-object patch', patch);
+          return;
+        }
+
+        if (this.showDebug) {
+          this.allPatches.push(patch);
+        }
+
+        if (_lib.default.isPromise(patch.value)) {
+          this.promisedPatches.push(patch);
+          this.promisedPatchThen(patch);
+          return;
+        }
+
+        if (_lib.default.isContextPatch(patch)) {
+          this.setContext(patch.path, patch.value);
+          return;
+        }
+
+        if (_lib.default.isMutation(patch)) {
+          this.updateMutations(patch);
+          return;
+        }
+      } catch (e) {
+        console.error(e); // eslint-disable-line no-console
+
+        this.errors.push(e);
+      }
+    });
+  }
+
+  updateMutations(patch) {
+    if (typeof patch.value === 'object' && !Array.isArray(patch.value) && this.allowMetaPatches) {
+      patch.value = _objectSpread({}, patch.value);
+    }
+
+    const result = _lib.default.applyPatch(this.state, patch, {
+      allowMetaPatches: this.allowMetaPatches
+    });
+
+    if (result) {
+      this.mutations.push(patch);
+      this.state = result;
+    }
+  }
+
+  removePromisedPatch(patch) {
+    const index = this.promisedPatches.indexOf(patch);
+
+    if (index < 0) {
+      this.debug("Tried to remove a promisedPatch that isn't there!");
+      return;
+    }
+
+    this.promisedPatches.splice(index, 1);
+  }
+
+  promisedPatchThen(patch) {
+    patch.value = patch.value.then(val => {
+      const promisedPatch = _objectSpread(_objectSpread({}, patch), {}, {
+        value: val
+      });
+
+      this.removePromisedPatch(patch);
+      this.updatePatches(promisedPatch);
+    }).catch(e => {
+      this.removePromisedPatch(patch);
+      this.updatePatches(e);
+    });
+    return patch.value;
+  }
+
+  getMutations(from, to) {
+    from = from || 0;
+
+    if (typeof to !== 'number') {
+      to = this.mutations.length;
+    }
+
+    return this.mutations.slice(from, to);
+  }
+
+  getCurrentMutations() {
+    return this.getMutationsForPlugin(this.getCurrentPlugin());
+  }
+
+  getMutationsForPlugin(plugin) {
+    const tip = this.getPluginMutationIndex(plugin);
+    return this.getMutations(tip + 1);
+  }
+
+  getCurrentPlugin() {
+    return this.currentPlugin;
+  }
+
+  getLib() {
+    return this.libMethods;
+  } // eslint-disable-next-line no-underscore-dangle
+
+
+  _get(path) {
+    return _lib.default.getIn(this.state, path);
+  } // eslint-disable-next-line no-underscore-dangle
+
+
+  _getContext(path) {
+    return this.contextTree.get(path);
+  }
+
+  setContext(path, value) {
+    return this.contextTree.set(path, value);
+  } // eslint-disable-next-line no-underscore-dangle
+
+
+  _hasRun(count) {
+    const times = this.getPluginRunCount(this.getCurrentPlugin());
+    return times > (count || 0);
+  }
+
+  dispatch() {
+    const that = this;
+    const plugin = this.nextPlugin();
+
+    if (!plugin) {
+      const nextPromise = this.nextPromisedPatch();
+
+      if (nextPromise) {
+        return nextPromise.then(() => this.dispatch()).catch(() => this.dispatch());
+      } // We're done!
+
+
+      const result = {
+        spec: this.state,
+        errors: this.errors
+      };
+
+      if (this.showDebug) {
+        result.patches = this.allPatches;
+      }
+
+      return Promise.resolve(result);
+    } // Makes sure plugin isn't running an endless loop
+
+
+    that.pluginCount = that.pluginCount || {};
+    that.pluginCount[plugin] = (that.pluginCount[plugin] || 0) + 1;
+
+    if (that.pluginCount[plugin] > HARD_LIMIT) {
+      return Promise.resolve({
+        spec: that.state,
+        errors: that.errors.concat(new Error(`We've reached a hard limit of ${HARD_LIMIT} plugin runs`))
+      });
+    } // A different plugin runs, wait for all promises to resolve, then retry
+
+
+    if (plugin !== this.currentPlugin && this.promisedPatches.length) {
+      const promises = this.promisedPatches.map(p => p.value); // Waits for all to settle instead of Promise.all which stops on rejection
+
+      return Promise.all(promises.map(promise => {
+        return promise.then(_noop.default, _noop.default);
+      })).then(() => this.dispatch());
+    } // Ok, run the plugin
+
+
+    return executePlugin();
+
+    function executePlugin() {
+      that.currentPlugin = plugin;
+      const mutations = that.getCurrentMutations();
+      const lastMutationIndex = that.mutations.length - 1;
+
+      try {
+        if (plugin.isGenerator) {
+          // eslint-disable-next-line no-restricted-syntax
+          for (const yieldedPatches of plugin(mutations, that.getLib())) {
+            updatePatches(yieldedPatches);
+          }
+        } else {
+          const newPatches = plugin(mutations, that.getLib());
+          updatePatches(newPatches);
+        }
+      } catch (e) {
+        console.error(e); // eslint-disable-line no-console
+
+        updatePatches([Object.assign(Object.create(e), {
+          plugin
+        })]);
+      } finally {
+        that.updatePluginHistory(plugin, {
+          mutationIndex: lastMutationIndex
+        });
+      }
+
+      return that.dispatch();
+    }
+
+    function updatePatches(patches) {
+      if (patches) {
+        patches = _lib.default.fullyNormalizeArray(patches);
+        that.updatePatches(patches, plugin);
+      }
+    }
+  }
+
+}
+
+exports.SpecMap = SpecMap;
+
+function mapSpec(opts) {
+  return new SpecMap(opts).dispatch();
+}
+
+const plugins = {
+  refs: _refs.default,
+  allOf: _allOf.default,
+  parameters: _parameters.default,
+  properties: _properties.default
+};
+exports.plugins = plugins;
+
+/***/ }),
 /* 421 */,
 /* 422 */,
 /* 423 */
@@ -8913,6 +8879,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const os = __importStar(__webpack_require__(87));
+const utils_1 = __webpack_require__(82);
 /**
  * Commands
  *
@@ -8966,28 +8933,14 @@ class Command {
         return cmdStr;
     }
 }
-/**
- * Sanitizes an input into a string so it can be passed into issueCommand safely
- * @param input input to sanitize into a string
- */
-function toCommandValue(input) {
-    if (input === null || input === undefined) {
-        return '';
-    }
-    else if (typeof input === 'string' || input instanceof String) {
-        return input;
-    }
-    return JSON.stringify(input);
-}
-exports.toCommandValue = toCommandValue;
 function escapeData(s) {
-    return toCommandValue(s)
+    return utils_1.toCommandValue(s)
         .replace(/%/g, '%25')
         .replace(/\r/g, '%0D')
         .replace(/\n/g, '%0A');
 }
 function escapeProperty(s) {
-    return toCommandValue(s)
+    return utils_1.toCommandValue(s)
         .replace(/%/g, '%25')
         .replace(/\r/g, '%0D')
         .replace(/\n/g, '%0A')
@@ -9116,7 +9069,42 @@ module.exports = stringToPath;
 /* 441 */,
 /* 442 */,
 /* 443 */,
-/* 444 */,
+/* 444 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var baseGetTag = __webpack_require__(190),
+    isArray = __webpack_require__(143),
+    isObjectLike = __webpack_require__(337);
+
+/** `Object#toString` result references. */
+var stringTag = '[object String]';
+
+/**
+ * Checks if `value` is classified as a `String` primitive or object.
+ *
+ * @static
+ * @since 0.1.0
+ * @memberOf _
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is a string, else `false`.
+ * @example
+ *
+ * _.isString('abc');
+ * // => true
+ *
+ * _.isString(1);
+ * // => false
+ */
+function isString(value) {
+  return typeof value == 'string' ||
+    (!isArray(value) && isObjectLike(value) && baseGetTag(value) == stringTag);
+}
+
+module.exports = isString;
+
+
+/***/ }),
 /* 445 */,
 /* 446 */,
 /* 447 */,
@@ -9620,6 +9608,12 @@ function convertBody(buffer, headers) {
 	// html4
 	if (!res && str) {
 		res = /<meta[\s]+?http-equiv=(['"])content-type\1[\s]+?content=(['"])(.+?)\2/i.exec(str);
+		if (!res) {
+			res = /<meta[\s]+?content=(['"])(.+?)\1[\s]+?http-equiv=(['"])content-type\3/i.exec(str);
+			if (res) {
+				res.pop(); // drop last quote
+			}
+		}
 
 		if (res) {
 			res = /charset=(.*)/i.exec(res.pop());
@@ -10627,7 +10621,7 @@ function fetch(url, opts) {
 				// HTTP fetch step 5.5
 				switch (request.redirect) {
 					case 'error':
-						reject(new FetchError(`redirect mode is set to error: ${request.url}`, 'no-redirect'));
+						reject(new FetchError(`uri requested responds with a redirect, redirect mode is set to error: ${request.url}`, 'no-redirect'));
 						finalize();
 						return;
 					case 'manual':
@@ -10666,7 +10660,8 @@ function fetch(url, opts) {
 							method: request.method,
 							body: request.body,
 							signal: request.signal,
-							timeout: request.timeout
+							timeout: request.timeout,
+							size: request.size
 						};
 
 						// HTTP-redirect fetch step 9
@@ -12527,6 +12522,8 @@ var __importStar = (this && this.__importStar) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const command_1 = __webpack_require__(431);
+const file_command_1 = __webpack_require__(102);
+const utils_1 = __webpack_require__(82);
 const os = __importStar(__webpack_require__(87));
 const path = __importStar(__webpack_require__(622));
 /**
@@ -12553,9 +12550,17 @@ var ExitCode;
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function exportVariable(name, val) {
-    const convertedVal = command_1.toCommandValue(val);
+    const convertedVal = utils_1.toCommandValue(val);
     process.env[name] = convertedVal;
-    command_1.issueCommand('set-env', { name }, convertedVal);
+    const filePath = process.env['GITHUB_ENV'] || '';
+    if (filePath) {
+        const delimiter = '_GitHubActionsFileCommandDelimeter_';
+        const commandValue = `${name}<<${delimiter}${os.EOL}${convertedVal}${os.EOL}${delimiter}`;
+        file_command_1.issueCommand('ENV', commandValue);
+    }
+    else {
+        command_1.issueCommand('set-env', { name }, convertedVal);
+    }
 }
 exports.exportVariable = exportVariable;
 /**
@@ -12571,7 +12576,13 @@ exports.setSecret = setSecret;
  * @param inputPath
  */
 function addPath(inputPath) {
-    command_1.issueCommand('add-path', {}, inputPath);
+    const filePath = process.env['GITHUB_PATH'] || '';
+    if (filePath) {
+        file_command_1.issueCommand('PATH', inputPath);
+    }
+    else {
+        command_1.issueCommand('add-path', {}, inputPath);
+    }
     process.env['PATH'] = `${inputPath}${path.delimiter}${process.env['PATH']}`;
 }
 exports.addPath = addPath;
@@ -17309,7 +17320,7 @@ module.exports = new Schema({
     __webpack_require__(611)
   ],
   implicit: [
-    __webpack_require__(82),
+    __webpack_require__(841),
     __webpack_require__(633)
   ],
   explicit: [
@@ -18391,7 +18402,12 @@ module.exports = baseCreate;
 /* 785 */,
 /* 786 */,
 /* 787 */,
-/* 788 */,
+/* 788 */
+/***/ (function(module) {
+
+module.exports = {"name":"lightstep-js-sdk","version":"0.0.3","description":"Javascript SDK for the public Lighstep API","main":"src/index.js","dependencies":{"node-fetch":"^2.6.1","swagger-client":"^3.10.12"},"devDependencies":{"eslint":"^7.5.0","jest":"^26.1.0"},"scripts":{"test":"./node_modules/.bin/jest","e2e":"./node_modules/.bin/jest --testRegex='./e2e/e2e.js'","lint":"eslint src"},"repository":{"type":"git","url":"git+https://github.com/lightstep/lightstep-js-sdk.git"},"author":"Lighstep, Inc.","license":"ISC","bugs":{"url":"https://github.com/lightstep/lightstep-js-sdk/issues"},"homepage":"https://github.com/lightstep/lightstep-js-sdk#readme","_resolved":"","_integrity":"","_from":"lightstep-js-sdk@git://github.com/lightstep/lightstep-js-sdk.git"};
+
+/***/ }),
 /* 789 */,
 /* 790 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
@@ -19371,7 +19387,101 @@ module.exports = baseAssign;
 
 /***/ }),
 /* 840 */,
-/* 841 */,
+/* 841 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+"use strict";
+
+
+var Type = __webpack_require__(945);
+
+var YAML_DATE_REGEXP = new RegExp(
+  '^([0-9][0-9][0-9][0-9])'          + // [1] year
+  '-([0-9][0-9])'                    + // [2] month
+  '-([0-9][0-9])$');                   // [3] day
+
+var YAML_TIMESTAMP_REGEXP = new RegExp(
+  '^([0-9][0-9][0-9][0-9])'          + // [1] year
+  '-([0-9][0-9]?)'                   + // [2] month
+  '-([0-9][0-9]?)'                   + // [3] day
+  '(?:[Tt]|[ \\t]+)'                 + // ...
+  '([0-9][0-9]?)'                    + // [4] hour
+  ':([0-9][0-9])'                    + // [5] minute
+  ':([0-9][0-9])'                    + // [6] second
+  '(?:\\.([0-9]*))?'                 + // [7] fraction
+  '(?:[ \\t]*(Z|([-+])([0-9][0-9]?)' + // [8] tz [9] tz_sign [10] tz_hour
+  '(?::([0-9][0-9]))?))?$');           // [11] tz_minute
+
+function resolveYamlTimestamp(data) {
+  if (data === null) return false;
+  if (YAML_DATE_REGEXP.exec(data) !== null) return true;
+  if (YAML_TIMESTAMP_REGEXP.exec(data) !== null) return true;
+  return false;
+}
+
+function constructYamlTimestamp(data) {
+  var match, year, month, day, hour, minute, second, fraction = 0,
+      delta = null, tz_hour, tz_minute, date;
+
+  match = YAML_DATE_REGEXP.exec(data);
+  if (match === null) match = YAML_TIMESTAMP_REGEXP.exec(data);
+
+  if (match === null) throw new Error('Date resolve error');
+
+  // match: [1] year [2] month [3] day
+
+  year = +(match[1]);
+  month = +(match[2]) - 1; // JS month starts with 0
+  day = +(match[3]);
+
+  if (!match[4]) { // no hour
+    return new Date(Date.UTC(year, month, day));
+  }
+
+  // match: [4] hour [5] minute [6] second [7] fraction
+
+  hour = +(match[4]);
+  minute = +(match[5]);
+  second = +(match[6]);
+
+  if (match[7]) {
+    fraction = match[7].slice(0, 3);
+    while (fraction.length < 3) { // milli-seconds
+      fraction += '0';
+    }
+    fraction = +fraction;
+  }
+
+  // match: [8] tz [9] tz_sign [10] tz_hour [11] tz_minute
+
+  if (match[9]) {
+    tz_hour = +(match[10]);
+    tz_minute = +(match[11] || 0);
+    delta = (tz_hour * 60 + tz_minute) * 60000; // delta in mili-seconds
+    if (match[9] === '-') delta = -delta;
+  }
+
+  date = new Date(Date.UTC(year, month, day, hour, minute, second, fraction));
+
+  if (delta) date.setTime(date.getTime() - delta);
+
+  return date;
+}
+
+function representYamlTimestamp(object /*, style*/) {
+  return object.toISOString();
+}
+
+module.exports = new Type('tag:yaml.org,2002:timestamp', {
+  kind: 'scalar',
+  resolve: resolveYamlTimestamp,
+  construct: constructYamlTimestamp,
+  instanceOf: Date,
+  represent: representYamlTimestamp
+});
+
+
+/***/ }),
 /* 842 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
@@ -22183,6 +22293,7 @@ module.exports = cloneArrayBuffer;
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
 const Swagger = __webpack_require__(601)
+const VERSION = __webpack_require__(788).version
 
 /**
 * This class provides methods to call the Lightstep Public APs.
@@ -22241,9 +22352,86 @@ class LightstepAPI {
         if (!req.headers.Authorization) {
             req.headers.Authorization = 'Bearer ' + coreAPIInstance.apiKey
         }
+        if (!req.headers['User-Agent']) {
+            req.headers['User-Agent'] = `lightstep-js-sdk ${VERSION}`
+        }
         if (!req.headers['Content-Type']) {
             req.headers['Content-Type'] = 'application/json'
         }
+    }
+
+    /**
+     * Converts an array of spans to a nested span tree with inline reporter metadata.
+     *
+     * @param {Object} spans
+     * @param {Object} reporters
+     */
+    createSpanTree(spans, reporters) {
+        let spanTable = {}
+
+        // creates table of all reporters
+        let reporterTable = {}
+        reporters.forEach( reporter => reporterTable[reporter['reporter-id']] = { ... reporter })
+        spans.forEach( span => spanTable[span['span-id']] =
+        { ...span, reporter : reporterTable[span['reporter-id']], childSpans : [] } )
+
+        // creates tree of span relationships
+        let dataTree = []
+        spans.forEach(span => {
+            if (span.tags.parent_span_guid) {
+                spanTable[span.tags.parent_span_guid].childSpans.push(spanTable[span['span-id']])
+            } else {
+                dataTree.push(spanTable[span['span-id']])
+            }
+        })
+        // assumption: all traces have a single root
+        return dataTree[0]
+    }
+
+    /**
+    * Finds service-to-service relationships from a collection of spans in a tree.
+    *
+    * Example output (from a single trace):
+    *
+    * ```
+    * {
+    *   ROOT: [ 'frontend' ],
+    *   frontend: [
+    *     'productcatalogservice',
+    *     'currencyservice',
+    *     'cartservice',
+    *     'recommendationservice'
+    *   ],
+    *   currencyservice: [],
+    *   cartservice: [],
+    *   recommendationservice: [ 'productcatalogservice' ]
+    * }
+    * ```
+    *
+    * @param {Object} tree
+    */
+    findServiceRelationships(tree) {
+        let relationships = {}
+        let duration = {}
+        const traverse = (tree, parent) => {
+            var parentName = (parent && parent.reporter.attributes['lightstep.component_name']) || 'ROOT'
+            var currentName = tree.reporter.attributes['lightstep.component_name']
+
+            relationships[parentName] = (relationships[parentName] || [])
+            if (!relationships[parentName].includes(currentName) && parentName !== currentName) {
+                duration[`${parentName}->${currentName}`] = (tree['end-time-micros'] - tree['start-time-micros'])
+                relationships[parentName].push(currentName)
+            }
+
+            if (tree.childSpans.length > 0) {
+                tree.childSpans.forEach(cs => {
+                    traverse(cs, tree)
+                })
+            }
+        }
+
+        traverse(tree)
+        return {relationships, duration}
     }
 
     /**
@@ -22332,7 +22520,7 @@ exports.default = resolve;
 
 var _http = _interopRequireDefault(__webpack_require__(297));
 
-var _specmap = _interopRequireWildcard(__webpack_require__(102));
+var _specmap = _interopRequireWildcard(__webpack_require__(420));
 
 var _helpers = __webpack_require__(992);
 

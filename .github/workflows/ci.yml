@@ -1,12 +1,7 @@
 name: 'Continuous Integration'
 
-on: workflow_dispatch
-
-#on:
-#  push:
-#    branches:
-#    - master
-#  pull_request:
+on:
+  pull_request:
 
 jobs:
   test:
