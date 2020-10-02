@@ -16,7 +16,7 @@
     "@actions/core": "^1.2.6",
     "@actions/github": "^4.0.0",
     "js-yaml": "^3.14.0",
-    "lightstep-js-sdk": "git+ssh://git@github.com/lightstep/lightstep-js-sdk.git",
+    "lightstep-js-sdk": "git://github.com/lightstep/lightstep-js-sdk.git",
     "lodash.template": "^4.5.0",
     "node-fetch": "^2.6.1"
   },
