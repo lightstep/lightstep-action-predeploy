@@ -100,7 +100,7 @@ Additional inputs (_optional_):
 | `pagerduty_api_token`| N/A               | `PAGERDUTY_API_TOKEN`  |
 | `rollbar_api_token`  | N/A               | `ROLLBAR_API_TOKEN`    |
 
-## `.lightstep.yml` Configuratation
+## `.lightstep.yml` Configuration
 
 This action reads configuration from a special file you add to the root of your repository.
 
