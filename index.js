@@ -80,7 +80,7 @@ async function run() {
             { lightstepOrg, lightstepProj, lightstepToken, lightstepConditions : yamlFile.conditions })
 
         // Rollbar context
-        if (yamlFile.integrations.rollbar) {
+        if (yamlFile.integrations && yamlFile.integrations.rollbar) {
             assertActionInput('rollbar_api_token')
             const token = resolveActionInput('rollbar_api_token')
             templateContext.rollbar = await rollbarContext.getSummary(
@@ -90,7 +90,7 @@ async function run() {
         }
 
         // PagerDuty context
-        if (yamlFile.integrations.pagerduty) {
+        if (yamlFile.integrations && yamlFile.integrations.pagerduty) {
             assertActionInput('pagerduty_api_token')
             const token = resolveActionInput('pagerduty_api_token')
             templateContext.pagerduty = await pagerdutyContext.getSummary(
