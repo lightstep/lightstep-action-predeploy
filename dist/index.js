@@ -380,7 +380,7 @@ exports.getSummary = async ({lightstepProj, lightstepOrg, lightstepToken, lights
         if (noViolations.length === context.length) {
             status = "ok"
             message = "No conditions have violations"
-        } else if (violated.length > 1) {
+        } else if (violated.length > 0) {
             status = "error"
             message = "Condition(s) have violations"
         }
@@ -21122,7 +21122,7 @@ module.exports = baseCreate;
 /* 788 */
 /***/ (function(module) {
 
-module.exports = {"_from":"git://github.com/lightstep/lightstep-js-sdk.git","_id":"lightstep-js-sdk@0.0.8","_inBundle":false,"_integrity":"","_location":"/lightstep-js-sdk","_phantomChildren":{"escalade":"3.1.1","get-caller-file":"2.0.5","require-directory":"2.1.1","strip-ansi":"6.0.0"},"_requested":{"type":"git","raw":"git://github.com/lightstep/lightstep-js-sdk.git","rawSpec":"git://github.com/lightstep/lightstep-js-sdk.git","saveSpec":"git://github.com/lightstep/lightstep-js-sdk.git","fetchSpec":"git://github.com/lightstep/lightstep-js-sdk.git","gitCommittish":null},"_requiredBy":["#USER","/"],"_resolved":"git://github.com/lightstep/lightstep-js-sdk.git#248e5ac22ddf84616317f3fc31d123f0dbc6d17e","_spec":"git://github.com/lightstep/lightstep-js-sdk.git","_where":"/Users/claysmith/workspace/lightstep-action-predeploy","author":{"name":"Lighstep, Inc."},"bin":{"lightstep":"bin/index.js"},"bugs":{"url":"https://github.com/lightstep/lightstep-js-sdk/issues"},"bundleDependencies":false,"dependencies":{"graphviz":"0.0.9","node-fetch":"^2.6.1","swagger-client":"^3.10.12","yargs":"^16.0.3"},"deprecated":false,"description":"Javascript SDK for the public Lighstep API","devDependencies":{"eslint":"^7.5.0","jest":"^26.1.0"},"homepage":"https://github.com/lightstep/lightstep-js-sdk#readme","license":"ISC","main":"src/index.js","name":"lightstep-js-sdk","repository":{"type":"git","url":"git+https://github.com/lightstep/lightstep-js-sdk.git"},"scripts":{"e2e":"jest --testRegex='./e2e/e2e.js'","lint":"eslint src","test":"jest"},"version":"0.0.8"};
+module.exports = {"name":"lightstep-js-sdk","version":"0.0.8","description":"Javascript SDK for the public Lighstep API","main":"src/index.js","dependencies":{"graphviz":"0.0.9","node-fetch":"^2.6.1","swagger-client":"^3.10.12","yargs":"^16.0.3"},"bin":{"lightstep":"./bin/index.js"},"devDependencies":{"eslint":"^7.5.0","jest":"^26.1.0"},"scripts":{"test":"./node_modules/.bin/jest","e2e":"./node_modules/.bin/jest --testRegex='./e2e/e2e.js'","lint":"eslint src"},"repository":{"type":"git","url":"git+https://github.com/lightstep/lightstep-js-sdk.git"},"author":"Lighstep, Inc.","license":"ISC","bugs":{"url":"https://github.com/lightstep/lightstep-js-sdk/issues"},"homepage":"https://github.com/lightstep/lightstep-js-sdk#readme","_resolved":"","_integrity":"","_from":"lightstep-js-sdk@git://github.com/lightstep/lightstep-js-sdk.git"};
 
 /***/ }),
 /* 789 */,
