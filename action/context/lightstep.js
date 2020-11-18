@@ -5,27 +5,49 @@ const LIGHTSTEP_WEB_HOST = 'app.lightstep.com'
 const getApiContext = async ({lightstepProj, lightstepOrg, lightstepToken, lightstepConditions = []}) => {
     const apiClient = await lightstepSdk.init(lightstepOrg, lightstepToken)
     // if no conditions are specified, use all conditions from project
+    var conditionsResponse = []
+    var lightstepConditionIds = []
+    var conditionStreams = {}
     if (lightstepConditions.length === 0) {
-        const conditionsResponse = await apiClient.sdk.apis.Conditions.listConditionsID({
+        conditionsResponse = await apiClient.sdk.apis.Conditions.listConditionsID({
             organization : lightstepOrg,
             project      : lightstepProj
         })
-        lightstepConditions = conditionsResponse.body.data.map(c => c.id)
+        conditionsResponse = conditionsResponse.obj.data
+        lightstepConditionIds = conditionsResponse.map(c => c.id)
+    } else {
+        const lightstepConditionPromises = lightstepConditions.map(id => {
+            return apiClient.sdk.apis.Conditions.getConditionID(
+                {'condition-id' : id, organization : lightstepOrg, project : lightstepProj})
+        })
+        const lightstepConditionsResp = await Promise.all(lightstepConditionPromises)
+        conditionsResponse = lightstepConditionsResp.map(r => r.obj.data)
+        lightstepConditionIds = conditionsResponse.map(c => c.id)
     }
-
-    const conditionStatusPromises = lightstepConditions.map(id => apiClient.sdk.apis.Conditions.getConditionStatusID({
-        'condition-id' : id,
-        organization   : lightstepOrg,
-        project        : lightstepProj
-    })
+    conditionStreams = conditionsResponse.reduce((obj, c) => {
+        const parts = c.relationships.stream.links.related.split('/')
+        obj[c.id] = parts[parts.length-1]
+        return obj
+    }, {})
+    const conditionStatusPromises = lightstepConditionIds.map(
+        id => apiClient.sdk.apis.Conditions.getConditionStatusID({
+            'condition-id' : id,
+            organization   : lightstepOrg,
+            project        : lightstepProj
+        })
     )
     const conditionStatusResponses = await Promise.all(conditionStatusPromises)
     const conditionStatuses = conditionStatusResponses.map(s => {
         const cleanId = s.body.data.id.replace('-status', '')
+        const streamLink =
+            `https://app.lightstep.com/demo/stream/${conditionStreams[cleanId]}?selected_condition_id=${cleanId}`
         return {
-            id    : cleanId,
-            name  : s.body.data.attributes.expression,
-            state : s.body.data.attributes.state
+            id          : cleanId,
+            stream      : conditionStreams[cleanId],
+            streamLink  : streamLink,
+            name        : s.body.data.attributes.expression,
+            description : s.body.data.attributes.description,
+            state       : s.body.data.attributes.state
         }
     })
     return conditionStatuses

@@ -23,6 +23,17 @@ const actionState = (...states) => {
         'ok')
 }
 
+function conditionStatus(s) {
+    switch (s.state) {
+    case "true":
+        return ":red_circle:"
+    case "false":
+        return ":green_circle:"
+    default:
+        return ":white_circle:"
+    }
+}
+
 function trafficLightStatus(s) {
     switch (s) {
     case "unknown":
@@ -34,9 +45,9 @@ function trafficLightStatus(s) {
     }
 }
 
-module.exports.predeploy = async function({ lightstepOrg, lightstepProj, lightstepToken, yamlFile }) {
+module.exports.predeploy = async function({ lightstepOrg, lightstepProj, lightstepToken, yamlFile, isRollup }) {
     // Lightstep context
-    var templateContext = { trafficLightStatus }
+    var templateContext = { trafficLightStatus, conditionStatus }
     templateContext.lightstep = await lightstepContext.getSummary(
         { lightstepOrg, lightstepProj, lightstepToken, lightstepConditions : yamlFile.conditions })
 
@@ -60,11 +71,12 @@ module.exports.predeploy = async function({ lightstepOrg, lightstepProj, lightst
         templateContext.pagerduty = false
     }
 
+    templateContext.isRollup = isRollup
     templateContext.status = actionState(
         templateContext.lightstep.status,
         templateContext.rollbar && templateContext.rollbar.status)
-    const markdown = prTemplate(templateContext)
 
+    const markdown = prTemplate(templateContext)
     core.setOutput('lightstep_predeploy_status', templateContext.status)
     core.setOutput('lightstep_predeploy_md', markdown)
     return Promise.resolve()

@@ -27,6 +27,11 @@ inputs:
     description: 'The token to access the PagerDuty API'
     required: false
 
+  rollup_conditions:
+    description: 'Collapse all conditions to a single table row'
+    required: false
+    default: 'false'
+
 outputs:
   lightstep_predeploy_status:
     description: 'Status of pre-deploy checks after running (error, ok, or unknown)'
