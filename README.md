@@ -6,6 +6,8 @@ This Javascript-based action can be used when a pull request is approved by GitH
 
 :book: [Follow the tutorial on setting up this action on Lightstep's Documentation Portal](https://docs.lightstep.com/paths/git-hub-action-path)
 
+![Example Output in a PR](./example/images/pr-comment.png)
+
 ## Requirements
 
 ### GitHub

@@ -312,27 +312,49 @@ const LIGHTSTEP_WEB_HOST = 'app.lightstep.com'
 const getApiContext = async ({lightstepProj, lightstepOrg, lightstepToken, lightstepConditions = []}) => {
     const apiClient = await lightstepSdk.init(lightstepOrg, lightstepToken)
     // if no conditions are specified, use all conditions from project
+    var conditionsResponse = []
+    var lightstepConditionIds = []
+    var conditionStreams = {}
     if (lightstepConditions.length === 0) {
-        const conditionsResponse = await apiClient.sdk.apis.Conditions.listConditionsID({
+        conditionsResponse = await apiClient.sdk.apis.Conditions.listConditionsID({
             organization : lightstepOrg,
             project      : lightstepProj
         })
-        lightstepConditions = conditionsResponse.body.data.map(c => c.id)
+        conditionsResponse = conditionsResponse.obj.data
+        lightstepConditionIds = conditionsResponse.map(c => c.id)
+    } else {
+        const lightstepConditionPromises = lightstepConditions.map(id => {
+            return apiClient.sdk.apis.Conditions.getConditionID(
+                {'condition-id' : id, organization : lightstepOrg, project : lightstepProj})
+        })
+        const lightstepConditionsResp = await Promise.all(lightstepConditionPromises)
+        conditionsResponse = lightstepConditionsResp.map(r => r.obj.data)
+        lightstepConditionIds = conditionsResponse.map(c => c.id)
     }
-
-    const conditionStatusPromises = lightstepConditions.map(id => apiClient.sdk.apis.Conditions.getConditionStatusID({
-        'condition-id' : id,
-        organization   : lightstepOrg,
-        project        : lightstepProj
-    })
+    conditionStreams = conditionsResponse.reduce((obj, c) => {
+        const parts = c.relationships.stream.links.related.split('/')
+        obj[c.id] = parts[parts.length-1]
+        return obj
+    }, {})
+    const conditionStatusPromises = lightstepConditionIds.map(
+        id => apiClient.sdk.apis.Conditions.getConditionStatusID({
+            'condition-id' : id,
+            organization   : lightstepOrg,
+            project        : lightstepProj
+        })
     )
     const conditionStatusResponses = await Promise.all(conditionStatusPromises)
     const conditionStatuses = conditionStatusResponses.map(s => {
         const cleanId = s.body.data.id.replace('-status', '')
+        const streamLink =
+            `https://app.lightstep.com/demo/stream/${conditionStreams[cleanId]}?selected_condition_id=${cleanId}`
         return {
-            id    : cleanId,
-            name  : s.body.data.attributes.expression,
-            state : s.body.data.attributes.state
+            id          : cleanId,
+            stream      : conditionStreams[cleanId],
+            streamLink  : streamLink,
+            name        : s.body.data.attributes.expression,
+            description : s.body.data.attributes.description,
+            state       : s.body.data.attributes.state
         }
     })
     return conditionStatuses
@@ -2163,7 +2185,9 @@ async function run() {
         const lightstepOrg = resolveActionInput('lightstep_organization', yamlFile)
         const lightstepProj = resolveActionInput('lightstep_project', yamlFile)
         const lightstepToken = resolveActionInput('lightstep_api_key')
-        await predeploy({ lightstepOrg, lightstepProj, lightstepToken, yamlFile })
+        const isRollup = resolveActionInput('rollup_conditions') || false
+
+        await predeploy({ lightstepOrg, lightstepProj, lightstepToken, yamlFile, isRollup })
 
         core.setOutput('lightstep_organization', lightstepOrg)
         core.setOutput('lightstep_project', lightstepProj)
@@ -15847,6 +15871,17 @@ const actionState = (...states) => {
         'ok')
 }
 
+function conditionStatus(s) {
+    switch (s.state) {
+    case "true":
+        return ":red_circle:"
+    case "false":
+        return ":green_circle:"
+    default:
+        return ":white_circle:"
+    }
+}
+
 function trafficLightStatus(s) {
     switch (s) {
     case "unknown":
@@ -15858,9 +15893,9 @@ function trafficLightStatus(s) {
     }
 }
 
-module.exports.predeploy = async function({ lightstepOrg, lightstepProj, lightstepToken, yamlFile }) {
+module.exports.predeploy = async function({ lightstepOrg, lightstepProj, lightstepToken, yamlFile, isRollup }) {
     // Lightstep context
-    var templateContext = { trafficLightStatus }
+    var templateContext = { trafficLightStatus, conditionStatus }
     templateContext.lightstep = await lightstepContext.getSummary(
         { lightstepOrg, lightstepProj, lightstepToken, lightstepConditions : yamlFile.conditions })
 
@@ -15884,11 +15919,12 @@ module.exports.predeploy = async function({ lightstepOrg, lightstepProj, lightst
         templateContext.pagerduty = false
     }
 
+    templateContext.isRollup = isRollup
     templateContext.status = actionState(
         templateContext.lightstep.status,
         templateContext.rollbar && templateContext.rollbar.status)
-    const markdown = prTemplate(templateContext)
 
+    const markdown = prTemplate(templateContext)
     core.setOutput('lightstep_predeploy_status', templateContext.status)
     core.setOutput('lightstep_predeploy_md', markdown)
     return Promise.resolve()
