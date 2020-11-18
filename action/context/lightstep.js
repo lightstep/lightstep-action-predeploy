@@ -73,7 +73,7 @@ exports.getSummary = async ({lightstepProj, lightstepOrg, lightstepToken, lights
         if (noViolations.length === context.length) {
             status = "ok"
             message = "No conditions have violations"
-        } else if (violated.length > 1) {
+        } else if (violated.length > 0) {
             status = "error"
             message = "Condition(s) have violations"
         }
