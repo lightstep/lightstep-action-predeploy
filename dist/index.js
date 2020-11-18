@@ -260,7 +260,7 @@ module.exports.addConstructor = deprecated('addConstructor');
 /* 10 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
-var baseGetTag = __webpack_require__(190),
+var baseGetTag = __webpack_require__(51),
     isObject = __webpack_require__(323);
 
 /** `Object#toString` result references. */
@@ -302,7 +302,111 @@ module.exports = isFunction;
 /***/ }),
 /* 11 */,
 /* 12 */,
-/* 13 */,
+/* 13 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+const lightstepSdk = __webpack_require__(917)
+
+const LIGHTSTEP_WEB_HOST = 'app.lightstep.com'
+
+const getApiContext = async ({lightstepProj, lightstepOrg, lightstepToken, lightstepConditions = []}) => {
+    const apiClient = await lightstepSdk.init(lightstepOrg, lightstepToken)
+    // if no conditions are specified, use all conditions from project
+    var conditionsResponse = []
+    var lightstepConditionIds = []
+    var conditionStreams = {}
+    if (lightstepConditions.length === 0) {
+        conditionsResponse = await apiClient.sdk.apis.Conditions.listConditionsID({
+            organization : lightstepOrg,
+            project      : lightstepProj
+        })
+        conditionsResponse = conditionsResponse.obj.data
+        lightstepConditionIds = conditionsResponse.map(c => c.id)
+    } else {
+        const lightstepConditionPromises = lightstepConditions.map(id => {
+            return apiClient.sdk.apis.Conditions.getConditionID(
+                {'condition-id' : id, organization : lightstepOrg, project : lightstepProj})
+        })
+        const lightstepConditionsResp = await Promise.all(lightstepConditionPromises)
+        conditionsResponse = lightstepConditionsResp.map(r => r.obj.data)
+        lightstepConditionIds = conditionsResponse.map(c => c.id)
+    }
+    conditionStreams = conditionsResponse.reduce((obj, c) => {
+        const parts = c.relationships.stream.links.related.split('/')
+        obj[c.id] = parts[parts.length-1]
+        return obj
+    }, {})
+    const conditionStatusPromises = lightstepConditionIds.map(
+        id => apiClient.sdk.apis.Conditions.getConditionStatusID({
+            'condition-id' : id,
+            organization   : lightstepOrg,
+            project        : lightstepProj
+        })
+    )
+    const conditionStatusResponses = await Promise.all(conditionStatusPromises)
+    const conditionStatuses = conditionStatusResponses.map(s => {
+        const cleanId = s.body.data.id.replace('-status', '')
+        const streamLink =
+            `https://app.lightstep.com/demo/stream/${conditionStreams[cleanId]}?selected_condition_id=${cleanId}`
+        return {
+            id          : cleanId,
+            stream      : conditionStreams[cleanId],
+            streamLink  : streamLink,
+            name        : s.body.data.attributes.expression,
+            description : s.body.data.attributes.description,
+            state       : s.body.data.attributes.state
+        }
+    })
+    return conditionStatuses
+}
+
+const ICON_IMG = "https://user-images.githubusercontent.com/27153/90803298-6510e300-e2cd-11ea-91fa-5795a4481e20.png"
+
+exports.getSummary = async ({lightstepProj, lightstepOrg, lightstepToken, lightstepConditions}) => {
+    try {
+        const context = await getApiContext({lightstepProj, lightstepOrg, lightstepToken, lightstepConditions})
+
+        // todo: handle no conditions
+
+        var status = "unknown"
+        var message = "Condition status is unknown"
+        const details = context.map(c => {
+            return { message : `${c.name}: ${c.state}` }
+        })
+        const summaryLink = `https://${LIGHTSTEP_WEB_HOST}/${lightstepProj}/monitoring/conditions`
+        const noViolations = context.filter(c => c.state === 'false')
+        const violated = context.filter(c => c.state === 'true')
+
+        if (noViolations.length === context.length) {
+            status = "ok"
+            message = "No conditions have violations"
+        } else if (violated.length > 0) {
+            status = "error"
+            message = "Condition(s) have violations"
+        }
+
+        return {
+            status,
+            message,
+            summaryLink,
+            details,
+            context,
+            logo : ICON_IMG
+        }
+    } catch (e) {
+        return {
+            status      : "unknown",
+            message     : `Lightstep API Error: ${e.message}`,
+            summaryLink : "https://lightstep.com",
+            details     : [],
+            logo        : ICON_IMG
+        }
+    }
+
+}
+
+
+/***/ }),
 /* 14 */,
 /* 15 */,
 /* 16 */,
@@ -409,7 +513,193 @@ module.exports = new Schema({
 /* 38 */,
 /* 39 */,
 /* 40 */,
-/* 41 */,
+/* 41 */
+/***/ (function(__unusedmodule, exports) {
+
+/*!
+ * https://github.com/Starcounter-Jack/JSON-Patch
+ * (c) 2017 Joachim Wester
+ * MIT license
+ */
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var _hasOwnProperty = Object.prototype.hasOwnProperty;
+function hasOwnProperty(obj, key) {
+    return _hasOwnProperty.call(obj, key);
+}
+exports.hasOwnProperty = hasOwnProperty;
+function _objectKeys(obj) {
+    if (Array.isArray(obj)) {
+        var keys = new Array(obj.length);
+        for (var k = 0; k < keys.length; k++) {
+            keys[k] = "" + k;
+        }
+        return keys;
+    }
+    if (Object.keys) {
+        return Object.keys(obj);
+    }
+    var keys = [];
+    for (var i in obj) {
+        if (hasOwnProperty(obj, i)) {
+            keys.push(i);
+        }
+    }
+    return keys;
+}
+exports._objectKeys = _objectKeys;
+;
+/**
+* Deeply clone the object.
+* https://jsperf.com/deep-copy-vs-json-stringify-json-parse/25 (recursiveDeepCopy)
+* @param  {any} obj value to clone
+* @return {any} cloned obj
+*/
+function _deepClone(obj) {
+    switch (typeof obj) {
+        case "object":
+            return JSON.parse(JSON.stringify(obj)); //Faster than ES5 clone - http://jsperf.com/deep-cloning-of-objects/5
+        case "undefined":
+            return null; //this is how JSON.stringify behaves for array items
+        default:
+            return obj; //no need to clone primitives
+    }
+}
+exports._deepClone = _deepClone;
+//3x faster than cached /^\d+$/.test(str)
+function isInteger(str) {
+    var i = 0;
+    var len = str.length;
+    var charCode;
+    while (i < len) {
+        charCode = str.charCodeAt(i);
+        if (charCode >= 48 && charCode <= 57) {
+            i++;
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+exports.isInteger = isInteger;
+/**
+* Escapes a json pointer path
+* @param path The raw pointer
+* @return the Escaped path
+*/
+function escapePathComponent(path) {
+    if (path.indexOf('/') === -1 && path.indexOf('~') === -1)
+        return path;
+    return path.replace(/~/g, '~0').replace(/\//g, '~1');
+}
+exports.escapePathComponent = escapePathComponent;
+/**
+ * Unescapes a json pointer path
+ * @param path The escaped pointer
+ * @return The unescaped path
+ */
+function unescapePathComponent(path) {
+    return path.replace(/~1/g, '/').replace(/~0/g, '~');
+}
+exports.unescapePathComponent = unescapePathComponent;
+function _getPathRecursive(root, obj) {
+    var found;
+    for (var key in root) {
+        if (hasOwnProperty(root, key)) {
+            if (root[key] === obj) {
+                return escapePathComponent(key) + '/';
+            }
+            else if (typeof root[key] === 'object') {
+                found = _getPathRecursive(root[key], obj);
+                if (found != '') {
+                    return escapePathComponent(key) + '/' + found;
+                }
+            }
+        }
+    }
+    return '';
+}
+exports._getPathRecursive = _getPathRecursive;
+function getPath(root, obj) {
+    if (root === obj) {
+        return '/';
+    }
+    var path = _getPathRecursive(root, obj);
+    if (path === '') {
+        throw new Error("Object not found in root");
+    }
+    return '/' + path;
+}
+exports.getPath = getPath;
+/**
+* Recursively checks whether an object has any undefined values inside.
+*/
+function hasUndefined(obj) {
+    if (obj === undefined) {
+        return true;
+    }
+    if (obj) {
+        if (Array.isArray(obj)) {
+            for (var i = 0, len = obj.length; i < len; i++) {
+                if (hasUndefined(obj[i])) {
+                    return true;
+                }
+            }
+        }
+        else if (typeof obj === "object") {
+            var objKeys = _objectKeys(obj);
+            var objKeysLength = objKeys.length;
+            for (var i = 0; i < objKeysLength; i++) {
+                if (hasUndefined(obj[objKeys[i]])) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+exports.hasUndefined = hasUndefined;
+function patchErrorMessageFormatter(message, args) {
+    var messageParts = [message];
+    for (var key in args) {
+        var value = typeof args[key] === 'object' ? JSON.stringify(args[key], null, 2) : args[key]; // pretty print
+        if (typeof value !== 'undefined') {
+            messageParts.push(key + ": " + value);
+        }
+    }
+    return messageParts.join('\n');
+}
+var PatchError = /** @class */ (function (_super) {
+    __extends(PatchError, _super);
+    function PatchError(message, name, index, operation, tree) {
+        var _newTarget = this.constructor;
+        var _this = _super.call(this, patchErrorMessageFormatter(message, { name: name, index: index, operation: operation, tree: tree })) || this;
+        _this.name = name;
+        _this.index = index;
+        _this.operation = operation;
+        _this.tree = tree;
+        Object.setPrototypeOf(_this, _newTarget.prototype); // restore prototype chain, see https://stackoverflow.com/a/48342359
+        _this.message = patchErrorMessageFormatter(message, { name: name, index: index, operation: operation, tree: tree });
+        return _this;
+    }
+    return PatchError;
+}(Error));
+exports.PatchError = PatchError;
+
+
+/***/ }),
 /* 42 */,
 /* 43 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
@@ -715,173 +1005,16 @@ module.exports = new Type('tag:yaml.org,2002:int', {
 /* 51 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
-/**
- * Lodash (Custom Build) <https://lodash.com/>
- * Build: `lodash modularize exports="npm" -o ./`
- * Copyright OpenJS Foundation and other contributors <https://openjsf.org/>
- * Released under MIT license <https://lodash.com/license>
- * Based on Underscore.js 1.8.3 <http://underscorejs.org/LICENSE>
- * Copyright Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
- */
-var reInterpolate = __webpack_require__(837);
-
-/** Used as references for various `Number` constants. */
-var INFINITY = 1 / 0;
+var Symbol = __webpack_require__(498),
+    getRawTag = __webpack_require__(985),
+    objectToString = __webpack_require__(602);
 
 /** `Object#toString` result references. */
 var nullTag = '[object Null]',
-    symbolTag = '[object Symbol]',
     undefinedTag = '[object Undefined]';
 
-/** Used to match HTML entities and HTML characters. */
-var reUnescapedHtml = /[&<>"']/g,
-    reHasUnescapedHtml = RegExp(reUnescapedHtml.source);
-
-/** Used to match template delimiters. */
-var reEscape = /<%-([\s\S]+?)%>/g,
-    reEvaluate = /<%([\s\S]+?)%>/g;
-
-/** Used to map characters to HTML entities. */
-var htmlEscapes = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;'
-};
-
-/** Detect free variable `global` from Node.js. */
-var freeGlobal = typeof global == 'object' && global && global.Object === Object && global;
-
-/** Detect free variable `self`. */
-var freeSelf = typeof self == 'object' && self && self.Object === Object && self;
-
-/** Used as a reference to the global object. */
-var root = freeGlobal || freeSelf || Function('return this')();
-
-/**
- * A specialized version of `_.map` for arrays without support for iteratee
- * shorthands.
- *
- * @private
- * @param {Array} [array] The array to iterate over.
- * @param {Function} iteratee The function invoked per iteration.
- * @returns {Array} Returns the new mapped array.
- */
-function arrayMap(array, iteratee) {
-  var index = -1,
-      length = array == null ? 0 : array.length,
-      result = Array(length);
-
-  while (++index < length) {
-    result[index] = iteratee(array[index], index, array);
-  }
-  return result;
-}
-
-/**
- * The base implementation of `_.propertyOf` without support for deep paths.
- *
- * @private
- * @param {Object} object The object to query.
- * @returns {Function} Returns the new accessor function.
- */
-function basePropertyOf(object) {
-  return function(key) {
-    return object == null ? undefined : object[key];
-  };
-}
-
-/**
- * Used by `_.escape` to convert characters to HTML entities.
- *
- * @private
- * @param {string} chr The matched character to escape.
- * @returns {string} Returns the escaped character.
- */
-var escapeHtmlChar = basePropertyOf(htmlEscapes);
-
-/** Used for built-in method references. */
-var objectProto = Object.prototype;
-
-/** Used to check objects for own properties. */
-var hasOwnProperty = objectProto.hasOwnProperty;
-
-/**
- * Used to resolve the
- * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
- * of values.
- */
-var nativeObjectToString = objectProto.toString;
-
 /** Built-in value references. */
-var Symbol = root.Symbol,
-    symToStringTag = Symbol ? Symbol.toStringTag : undefined;
-
-/** Used to convert symbols to primitives and strings. */
-var symbolProto = Symbol ? Symbol.prototype : undefined,
-    symbolToString = symbolProto ? symbolProto.toString : undefined;
-
-/**
- * By default, the template delimiters used by lodash are like those in
- * embedded Ruby (ERB) as well as ES2015 template strings. Change the
- * following template settings to use alternative delimiters.
- *
- * @static
- * @memberOf _
- * @type {Object}
- */
-var templateSettings = {
-
-  /**
-   * Used to detect `data` property values to be HTML-escaped.
-   *
-   * @memberOf _.templateSettings
-   * @type {RegExp}
-   */
-  'escape': reEscape,
-
-  /**
-   * Used to detect code to be evaluated.
-   *
-   * @memberOf _.templateSettings
-   * @type {RegExp}
-   */
-  'evaluate': reEvaluate,
-
-  /**
-   * Used to detect `data` property values to inject.
-   *
-   * @memberOf _.templateSettings
-   * @type {RegExp}
-   */
-  'interpolate': reInterpolate,
-
-  /**
-   * Used to reference the data object in the template text.
-   *
-   * @memberOf _.templateSettings
-   * @type {string}
-   */
-  'variable': '',
-
-  /**
-   * Used to import variables into the compiled template.
-   *
-   * @memberOf _.templateSettings
-   * @type {Object}
-   */
-  'imports': {
-
-    /**
-     * A reference to the `lodash` function.
-     *
-     * @memberOf _.templateSettings.imports
-     * @type {Function}
-     */
-    '_': { 'escape': escape }
-  }
-};
+var symToStringTag = Symbol ? Symbol.toStringTag : undefined;
 
 /**
  * The base implementation of `getTag` without fallbacks for buggy environments.
@@ -899,204 +1032,7 @@ function baseGetTag(value) {
     : objectToString(value);
 }
 
-/**
- * The base implementation of `_.toString` which doesn't convert nullish
- * values to empty strings.
- *
- * @private
- * @param {*} value The value to process.
- * @returns {string} Returns the string.
- */
-function baseToString(value) {
-  // Exit early for strings to avoid a performance hit in some environments.
-  if (typeof value == 'string') {
-    return value;
-  }
-  if (isArray(value)) {
-    // Recursively convert values (susceptible to call stack limits).
-    return arrayMap(value, baseToString) + '';
-  }
-  if (isSymbol(value)) {
-    return symbolToString ? symbolToString.call(value) : '';
-  }
-  var result = (value + '');
-  return (result == '0' && (1 / value) == -INFINITY) ? '-0' : result;
-}
-
-/**
- * A specialized version of `baseGetTag` which ignores `Symbol.toStringTag` values.
- *
- * @private
- * @param {*} value The value to query.
- * @returns {string} Returns the raw `toStringTag`.
- */
-function getRawTag(value) {
-  var isOwn = hasOwnProperty.call(value, symToStringTag),
-      tag = value[symToStringTag];
-
-  try {
-    value[symToStringTag] = undefined;
-    var unmasked = true;
-  } catch (e) {}
-
-  var result = nativeObjectToString.call(value);
-  if (unmasked) {
-    if (isOwn) {
-      value[symToStringTag] = tag;
-    } else {
-      delete value[symToStringTag];
-    }
-  }
-  return result;
-}
-
-/**
- * Converts `value` to a string using `Object.prototype.toString`.
- *
- * @private
- * @param {*} value The value to convert.
- * @returns {string} Returns the converted string.
- */
-function objectToString(value) {
-  return nativeObjectToString.call(value);
-}
-
-/**
- * Checks if `value` is classified as an `Array` object.
- *
- * @static
- * @memberOf _
- * @since 0.1.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is an array, else `false`.
- * @example
- *
- * _.isArray([1, 2, 3]);
- * // => true
- *
- * _.isArray(document.body.children);
- * // => false
- *
- * _.isArray('abc');
- * // => false
- *
- * _.isArray(_.noop);
- * // => false
- */
-var isArray = Array.isArray;
-
-/**
- * Checks if `value` is object-like. A value is object-like if it's not `null`
- * and has a `typeof` result of "object".
- *
- * @static
- * @memberOf _
- * @since 4.0.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is object-like, else `false`.
- * @example
- *
- * _.isObjectLike({});
- * // => true
- *
- * _.isObjectLike([1, 2, 3]);
- * // => true
- *
- * _.isObjectLike(_.noop);
- * // => false
- *
- * _.isObjectLike(null);
- * // => false
- */
-function isObjectLike(value) {
-  return value != null && typeof value == 'object';
-}
-
-/**
- * Checks if `value` is classified as a `Symbol` primitive or object.
- *
- * @static
- * @memberOf _
- * @since 4.0.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is a symbol, else `false`.
- * @example
- *
- * _.isSymbol(Symbol.iterator);
- * // => true
- *
- * _.isSymbol('abc');
- * // => false
- */
-function isSymbol(value) {
-  return typeof value == 'symbol' ||
-    (isObjectLike(value) && baseGetTag(value) == symbolTag);
-}
-
-/**
- * Converts `value` to a string. An empty string is returned for `null`
- * and `undefined` values. The sign of `-0` is preserved.
- *
- * @static
- * @memberOf _
- * @since 4.0.0
- * @category Lang
- * @param {*} value The value to convert.
- * @returns {string} Returns the converted string.
- * @example
- *
- * _.toString(null);
- * // => ''
- *
- * _.toString(-0);
- * // => '-0'
- *
- * _.toString([1, 2, 3]);
- * // => '1,2,3'
- */
-function toString(value) {
-  return value == null ? '' : baseToString(value);
-}
-
-/**
- * Converts the characters "&", "<", ">", '"', and "'" in `string` to their
- * corresponding HTML entities.
- *
- * **Note:** No other characters are escaped. To escape additional
- * characters use a third-party library like [_he_](https://mths.be/he).
- *
- * Though the ">" character is escaped for symmetry, characters like
- * ">" and "/" don't need escaping in HTML and have no special meaning
- * unless they're part of a tag or unquoted attribute value. See
- * [Mathias Bynens's article](https://mathiasbynens.be/notes/ambiguous-ampersands)
- * (under "semi-related fun fact") for more details.
- *
- * When working with HTML you should always
- * [quote attribute values](http://wonko.com/post/html-escaping) to reduce
- * XSS vectors.
- *
- * @static
- * @since 0.1.0
- * @memberOf _
- * @category String
- * @param {string} [string=''] The string to escape.
- * @returns {string} Returns the escaped string.
- * @example
- *
- * _.escape('fred, barney, & pebbles');
- * // => 'fred, barney, &amp; pebbles'
- */
-function escape(string) {
-  string = toString(string);
-  return (string && reHasUnescapedHtml.test(string))
-    ? string.replace(reUnescapedHtml, escapeHtmlChar)
-    : string;
-}
-
-module.exports = templateSettings;
+module.exports = baseGetTag;
 
 
 /***/ }),
@@ -1486,7 +1422,23 @@ module.exports = initCloneObject;
 
 /***/ }),
 /* 67 */,
-/* 68 */,
+/* 68 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+var fs = __webpack_require__(747);
+
+exports.exist = function(path) {
+  try {
+    fs.statSync( path );
+  }
+  catch(e) {
+    return( false );
+  }
+  return( true );
+}
+
+
+/***/ }),
 /* 69 */
 /***/ (function(module) {
 
@@ -1507,7 +1459,7 @@ module.exports = function(dst, src) {
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
 var baseSetToString = __webpack_require__(292),
-    shortOut = __webpack_require__(304);
+    shortOut = __webpack_require__(906);
 
 /**
  * Sets the `toString` method of `func` to return `string`.
@@ -2218,65 +2170,9 @@ exports.issueCommand = issueCommand;
 /***/ (function(__unusedmodule, __unusedexports, __webpack_require__) {
 
 const core = __webpack_require__(470)
-
-const path = __webpack_require__(622)
-const fs = __webpack_require__(747)
-const assert = __webpack_require__(357)
-const template = __webpack_require__(906)
-const config = __webpack_require__(164)
-
-const tmplFile = fs.readFileSync(__webpack_require__.ab + "pr.tmpl.md", 'utf8')
-const prTemplate = template(tmplFile)
-
-const lightstepContext = __webpack_require__(192)
-const rollbarContext = __webpack_require__(481)
-const pagerdutyContext = __webpack_require__(361)
-
-function trafficLightStatus(s) {
-    switch (s) {
-    case "unknown":
-        return ":white_circle:"
-    case "error":
-        return ":red_circle:"
-    case "ok":
-        return ":green_circle:"
-    }
-}
-
-/**
- * Resolves input as an enviornment variable or action input
- * @param {*} name input name
- */
-const resolveActionInput = (name, config = {}) => {
-    if (typeof name !== 'string') {
-        return null
-    }
-    const configName = name.replace('lightstep_', '')
-    return process.env[name.toUpperCase()] || core.getInput(name) || config[configName]
-}
-
-/**
- * Fails action if input does not exist
- * @param {*} name input name
- */
-const assertActionInput = (name, config) => {
-    if (!resolveActionInput(name, config)) {
-        const msg = `Input ${name} must be set as an env var, passed as an action input, or specified in .lightstep.yml`
-        core.setFailed(msg)
-        assert.fail(msg)
-    }
-}
-
-/**
- * Determines status of all pre-deploy checks
- * @param  {...any} states array of context summary statuses
- */
-const actionState = (...states) => {
-    return (states.find(s => s === 'error') ||
-        states.find(s => s === 'warn') ||
-        states.find(s => s === 'unknown') ||
-        'ok')
-}
+const config = __webpack_require__(558)
+const { assertActionInput, resolveActionInput } = __webpack_require__(114)
+const { predeploy } = __webpack_require__(619)
 
 async function run() {
     try {
@@ -2289,42 +2185,12 @@ async function run() {
         const lightstepOrg = resolveActionInput('lightstep_organization', yamlFile)
         const lightstepProj = resolveActionInput('lightstep_project', yamlFile)
         const lightstepToken = resolveActionInput('lightstep_api_key')
+        const isRollup = resolveActionInput('rollup_conditions') || false
+
+        await predeploy({ lightstepOrg, lightstepProj, lightstepToken, yamlFile, isRollup })
 
         core.setOutput('lightstep_organization', lightstepOrg)
         core.setOutput('lightstep_project', lightstepProj)
-
-        // Lightstep context
-        var templateContext = { trafficLightStatus }
-        templateContext.lightstep = await lightstepContext.getSummary(
-            { lightstepOrg, lightstepProj, lightstepToken, lightstepConditions : yamlFile.conditions })
-
-        // Rollbar context
-        if (yamlFile.integrations && yamlFile.integrations.rollbar) {
-            assertActionInput('rollbar_api_token')
-            const token = resolveActionInput('rollbar_api_token')
-            templateContext.rollbar = await rollbarContext.getSummary(
-                { token : token, yamlConfig : yamlFile.integrations.rollbar })
-        } else {
-            templateContext.rollbar = false
-        }
-
-        // PagerDuty context
-        if (yamlFile.integrations && yamlFile.integrations.pagerduty) {
-            assertActionInput('pagerduty_api_token')
-            const token = resolveActionInput('pagerduty_api_token')
-            templateContext.pagerduty = await pagerdutyContext.getSummary(
-                { token : token, yamlConfig : yamlFile.integrations.pagerduty })
-        } else {
-            templateContext.pagerduty = false
-        }
-
-        templateContext.status = actionState(
-            templateContext.lightstep.status,
-            templateContext.rollbar && templateContext.rollbar.status)
-        const markdown = prTemplate(templateContext)
-
-        core.setOutput('lightstep_predeploy_status', templateContext.status)
-        core.setOutput('lightstep_predeploy_md', markdown)
     } catch (error) {
         core.setFailed(error.message)
     }
@@ -2343,7 +2209,39 @@ run()
 /* 111 */,
 /* 112 */,
 /* 113 */,
-/* 114 */,
+/* 114 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+const core = __webpack_require__(470)
+const assert = __webpack_require__(357)
+
+/**
+ * Resolves input as an enviornment variable or action input
+ * @param {*} name input name
+ */
+const resolveActionInput = (name, config = {}) => {
+    if (typeof name !== 'string') {
+        return null
+    }
+    const configName = name.replace('lightstep_', '')
+    return process.env[name.toUpperCase()] || core.getInput(name) || config[configName]
+}
+
+/**
+* Fails action if input does not exist
+* @param {*} name input name
+*/
+const assertActionInput = (name, config) => {
+    if (!resolveActionInput(name, config)) {
+        const msg = `Input ${name} must be set as an env var, passed as an action input, or specified in .lightstep.yml`
+        core.setFailed(msg)
+        assert.fail(msg)
+    }
+}
+
+module.exports = { assertActionInput, resolveActionInput }
+
+/***/ }),
 /* 115 */
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
@@ -2666,7 +2564,7 @@ function applySecurities({
           if (/^bearer$/i.test(schema.scheme)) {
             result.headers.Authorization = `Bearer ${value}`;
           }
-        } else if (type === 'oauth2') {
+        } else if (type === 'oauth2' || type === 'openIdConnect') {
           const token = auth.token || {};
           const tokenName = schema['x-tokenName'] || 'access_token';
           const tokenValue = token[tokenName];
@@ -2688,7 +2586,12 @@ function applySecurities({
 /* 126 */,
 /* 127 */,
 /* 128 */,
-/* 129 */,
+/* 129 */
+/***/ (function(module) {
+
+module.exports = require("child_process");
+
+/***/ }),
 /* 130 */
 /***/ (function(module) {
 
@@ -2865,408 +2768,7 @@ module.exports = baseGet;
 /***/ }),
 /* 148 */,
 /* 149 */,
-/* 150 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-Object.defineProperty(exports, "__esModule", { value: true });
-var areEquals = __webpack_require__(766);
-var helpers_1 = __webpack_require__(258);
-exports.JsonPatchError = helpers_1.PatchError;
-exports.deepClone = helpers_1._deepClone;
-/* We use a Javascript hash to store each
- function. Each hash entry (property) uses
- the operation identifiers specified in rfc6902.
- In this way, we can map each patch operation
- to its dedicated function in efficient way.
- */
-/* The operations applicable to an object */
-var objOps = {
-    add: function (obj, key, document) {
-        obj[key] = this.value;
-        return { newDocument: document };
-    },
-    remove: function (obj, key, document) {
-        var removed = obj[key];
-        delete obj[key];
-        return { newDocument: document, removed: removed };
-    },
-    replace: function (obj, key, document) {
-        var removed = obj[key];
-        obj[key] = this.value;
-        return { newDocument: document, removed: removed };
-    },
-    move: function (obj, key, document) {
-        /* in case move target overwrites an existing value,
-        return the removed value, this can be taxing performance-wise,
-        and is potentially unneeded */
-        var removed = getValueByPointer(document, this.path);
-        if (removed) {
-            removed = helpers_1._deepClone(removed);
-        }
-        var originalValue = applyOperation(document, { op: "remove", path: this.from }).removed;
-        applyOperation(document, { op: "add", path: this.path, value: originalValue });
-        return { newDocument: document, removed: removed };
-    },
-    copy: function (obj, key, document) {
-        var valueToCopy = getValueByPointer(document, this.from);
-        // enforce copy by value so further operations don't affect source (see issue #177)
-        applyOperation(document, { op: "add", path: this.path, value: helpers_1._deepClone(valueToCopy) });
-        return { newDocument: document };
-    },
-    test: function (obj, key, document) {
-        return { newDocument: document, test: areEquals(obj[key], this.value) };
-    },
-    _get: function (obj, key, document) {
-        this.value = obj[key];
-        return { newDocument: document };
-    }
-};
-/* The operations applicable to an array. Many are the same as for the object */
-var arrOps = {
-    add: function (arr, i, document) {
-        if (helpers_1.isInteger(i)) {
-            arr.splice(i, 0, this.value);
-        }
-        else { // array props
-            arr[i] = this.value;
-        }
-        // this may be needed when using '-' in an array
-        return { newDocument: document, index: i };
-    },
-    remove: function (arr, i, document) {
-        var removedList = arr.splice(i, 1);
-        return { newDocument: document, removed: removedList[0] };
-    },
-    replace: function (arr, i, document) {
-        var removed = arr[i];
-        arr[i] = this.value;
-        return { newDocument: document, removed: removed };
-    },
-    move: objOps.move,
-    copy: objOps.copy,
-    test: objOps.test,
-    _get: objOps._get
-};
-/**
- * Retrieves a value from a JSON document by a JSON pointer.
- * Returns the value.
- *
- * @param document The document to get the value from
- * @param pointer an escaped JSON pointer
- * @return The retrieved value
- */
-function getValueByPointer(document, pointer) {
-    if (pointer == '') {
-        return document;
-    }
-    var getOriginalDestination = { op: "_get", path: pointer };
-    applyOperation(document, getOriginalDestination);
-    return getOriginalDestination.value;
-}
-exports.getValueByPointer = getValueByPointer;
-/**
- * Apply a single JSON Patch Operation on a JSON document.
- * Returns the {newDocument, result} of the operation.
- * It modifies the `document` and `operation` objects - it gets the values by reference.
- * If you would like to avoid touching your values, clone them:
- * `jsonpatch.applyOperation(document, jsonpatch._deepClone(operation))`.
- *
- * @param document The document to patch
- * @param operation The operation to apply
- * @param validateOperation `false` is without validation, `true` to use default jsonpatch's validation, or you can pass a `validateOperation` callback to be used for validation.
- * @param mutateDocument Whether to mutate the original document or clone it before applying
- * @param banPrototypeModifications Whether to ban modifications to `__proto__`, defaults to `true`.
- * @return `{newDocument, result}` after the operation
- */
-function applyOperation(document, operation, validateOperation, mutateDocument, banPrototypeModifications, index) {
-    if (validateOperation === void 0) { validateOperation = false; }
-    if (mutateDocument === void 0) { mutateDocument = true; }
-    if (banPrototypeModifications === void 0) { banPrototypeModifications = true; }
-    if (index === void 0) { index = 0; }
-    if (validateOperation) {
-        if (typeof validateOperation == 'function') {
-            validateOperation(operation, 0, document, operation.path);
-        }
-        else {
-            validator(operation, 0);
-        }
-    }
-    /* ROOT OPERATIONS */
-    if (operation.path === "") {
-        var returnValue = { newDocument: document };
-        if (operation.op === 'add') {
-            returnValue.newDocument = operation.value;
-            return returnValue;
-        }
-        else if (operation.op === 'replace') {
-            returnValue.newDocument = operation.value;
-            returnValue.removed = document; //document we removed
-            return returnValue;
-        }
-        else if (operation.op === 'move' || operation.op === 'copy') { // it's a move or copy to root
-            returnValue.newDocument = getValueByPointer(document, operation.from); // get the value by json-pointer in `from` field
-            if (operation.op === 'move') { // report removed item
-                returnValue.removed = document;
-            }
-            return returnValue;
-        }
-        else if (operation.op === 'test') {
-            returnValue.test = areEquals(document, operation.value);
-            if (returnValue.test === false) {
-                throw new exports.JsonPatchError("Test operation failed", 'TEST_OPERATION_FAILED', index, operation, document);
-            }
-            returnValue.newDocument = document;
-            return returnValue;
-        }
-        else if (operation.op === 'remove') { // a remove on root
-            returnValue.removed = document;
-            returnValue.newDocument = null;
-            return returnValue;
-        }
-        else if (operation.op === '_get') {
-            operation.value = document;
-            return returnValue;
-        }
-        else { /* bad operation */
-            if (validateOperation) {
-                throw new exports.JsonPatchError('Operation `op` property is not one of operations defined in RFC-6902', 'OPERATION_OP_INVALID', index, operation, document);
-            }
-            else {
-                return returnValue;
-            }
-        }
-    } /* END ROOT OPERATIONS */
-    else {
-        if (!mutateDocument) {
-            document = helpers_1._deepClone(document);
-        }
-        var path = operation.path || "";
-        var keys = path.split('/');
-        var obj = document;
-        var t = 1; //skip empty element - http://jsperf.com/to-shift-or-not-to-shift
-        var len = keys.length;
-        var existingPathFragment = undefined;
-        var key = void 0;
-        var validateFunction = void 0;
-        if (typeof validateOperation == 'function') {
-            validateFunction = validateOperation;
-        }
-        else {
-            validateFunction = validator;
-        }
-        while (true) {
-            key = keys[t];
-            if (banPrototypeModifications && key == '__proto__') {
-                throw new TypeError('JSON-Patch: modifying `__proto__` prop is banned for security reasons, if this was on purpose, please set `banPrototypeModifications` flag false and pass it to this function. More info in fast-json-patch README');
-            }
-            if (validateOperation) {
-                if (existingPathFragment === undefined) {
-                    if (obj[key] === undefined) {
-                        existingPathFragment = keys.slice(0, t).join('/');
-                    }
-                    else if (t == len - 1) {
-                        existingPathFragment = operation.path;
-                    }
-                    if (existingPathFragment !== undefined) {
-                        validateFunction(operation, 0, document, existingPathFragment);
-                    }
-                }
-            }
-            t++;
-            if (Array.isArray(obj)) {
-                if (key === '-') {
-                    key = obj.length;
-                }
-                else {
-                    if (validateOperation && !helpers_1.isInteger(key)) {
-                        throw new exports.JsonPatchError("Expected an unsigned base-10 integer value, making the new referenced value the array element with the zero-based index", "OPERATION_PATH_ILLEGAL_ARRAY_INDEX", index, operation, document);
-                    } // only parse key when it's an integer for `arr.prop` to work
-                    else if (helpers_1.isInteger(key)) {
-                        key = ~~key;
-                    }
-                }
-                if (t >= len) {
-                    if (validateOperation && operation.op === "add" && key > obj.length) {
-                        throw new exports.JsonPatchError("The specified index MUST NOT be greater than the number of elements in the array", "OPERATION_VALUE_OUT_OF_BOUNDS", index, operation, document);
-                    }
-                    var returnValue = arrOps[operation.op].call(operation, obj, key, document); // Apply patch
-                    if (returnValue.test === false) {
-                        throw new exports.JsonPatchError("Test operation failed", 'TEST_OPERATION_FAILED', index, operation, document);
-                    }
-                    return returnValue;
-                }
-            }
-            else {
-                if (key && key.indexOf('~') != -1) {
-                    key = helpers_1.unescapePathComponent(key);
-                }
-                if (t >= len) {
-                    var returnValue = objOps[operation.op].call(operation, obj, key, document); // Apply patch
-                    if (returnValue.test === false) {
-                        throw new exports.JsonPatchError("Test operation failed", 'TEST_OPERATION_FAILED', index, operation, document);
-                    }
-                    return returnValue;
-                }
-            }
-            obj = obj[key];
-        }
-    }
-}
-exports.applyOperation = applyOperation;
-/**
- * Apply a full JSON Patch array on a JSON document.
- * Returns the {newDocument, result} of the patch.
- * It modifies the `document` object and `patch` - it gets the values by reference.
- * If you would like to avoid touching your values, clone them:
- * `jsonpatch.applyPatch(document, jsonpatch._deepClone(patch))`.
- *
- * @param document The document to patch
- * @param patch The patch to apply
- * @param validateOperation `false` is without validation, `true` to use default jsonpatch's validation, or you can pass a `validateOperation` callback to be used for validation.
- * @param mutateDocument Whether to mutate the original document or clone it before applying
- * @param banPrototypeModifications Whether to ban modifications to `__proto__`, defaults to `true`.
- * @return An array of `{newDocument, result}` after the patch
- */
-function applyPatch(document, patch, validateOperation, mutateDocument, banPrototypeModifications) {
-    if (mutateDocument === void 0) { mutateDocument = true; }
-    if (banPrototypeModifications === void 0) { banPrototypeModifications = true; }
-    if (validateOperation) {
-        if (!Array.isArray(patch)) {
-            throw new exports.JsonPatchError('Patch sequence must be an array', 'SEQUENCE_NOT_AN_ARRAY');
-        }
-    }
-    if (!mutateDocument) {
-        document = helpers_1._deepClone(document);
-    }
-    var results = new Array(patch.length);
-    for (var i = 0, length_1 = patch.length; i < length_1; i++) {
-        // we don't need to pass mutateDocument argument because if it was true, we already deep cloned the object, we'll just pass `true`
-        results[i] = applyOperation(document, patch[i], validateOperation, true, banPrototypeModifications, i);
-        document = results[i].newDocument; // in case root was replaced
-    }
-    results.newDocument = document;
-    return results;
-}
-exports.applyPatch = applyPatch;
-/**
- * Apply a single JSON Patch Operation on a JSON document.
- * Returns the updated document.
- * Suitable as a reducer.
- *
- * @param document The document to patch
- * @param operation The operation to apply
- * @return The updated document
- */
-function applyReducer(document, operation, index) {
-    var operationResult = applyOperation(document, operation);
-    if (operationResult.test === false) { // failed test
-        throw new exports.JsonPatchError("Test operation failed", 'TEST_OPERATION_FAILED', index, operation, document);
-    }
-    return operationResult.newDocument;
-}
-exports.applyReducer = applyReducer;
-/**
- * Validates a single operation. Called from `jsonpatch.validate`. Throws `JsonPatchError` in case of an error.
- * @param {object} operation - operation object (patch)
- * @param {number} index - index of operation in the sequence
- * @param {object} [document] - object where the operation is supposed to be applied
- * @param {string} [existingPathFragment] - comes along with `document`
- */
-function validator(operation, index, document, existingPathFragment) {
-    if (typeof operation !== 'object' || operation === null || Array.isArray(operation)) {
-        throw new exports.JsonPatchError('Operation is not an object', 'OPERATION_NOT_AN_OBJECT', index, operation, document);
-    }
-    else if (!objOps[operation.op]) {
-        throw new exports.JsonPatchError('Operation `op` property is not one of operations defined in RFC-6902', 'OPERATION_OP_INVALID', index, operation, document);
-    }
-    else if (typeof operation.path !== 'string') {
-        throw new exports.JsonPatchError('Operation `path` property is not a string', 'OPERATION_PATH_INVALID', index, operation, document);
-    }
-    else if (operation.path.indexOf('/') !== 0 && operation.path.length > 0) {
-        // paths that aren't empty string should start with "/"
-        throw new exports.JsonPatchError('Operation `path` property must start with "/"', 'OPERATION_PATH_INVALID', index, operation, document);
-    }
-    else if ((operation.op === 'move' || operation.op === 'copy') && typeof operation.from !== 'string') {
-        throw new exports.JsonPatchError('Operation `from` property is not present (applicable in `move` and `copy` operations)', 'OPERATION_FROM_REQUIRED', index, operation, document);
-    }
-    else if ((operation.op === 'add' || operation.op === 'replace' || operation.op === 'test') && operation.value === undefined) {
-        throw new exports.JsonPatchError('Operation `value` property is not present (applicable in `add`, `replace` and `test` operations)', 'OPERATION_VALUE_REQUIRED', index, operation, document);
-    }
-    else if ((operation.op === 'add' || operation.op === 'replace' || operation.op === 'test') && helpers_1.hasUndefined(operation.value)) {
-        throw new exports.JsonPatchError('Operation `value` property is not present (applicable in `add`, `replace` and `test` operations)', 'OPERATION_VALUE_CANNOT_CONTAIN_UNDEFINED', index, operation, document);
-    }
-    else if (document) {
-        if (operation.op == "add") {
-            var pathLen = operation.path.split("/").length;
-            var existingPathLen = existingPathFragment.split("/").length;
-            if (pathLen !== existingPathLen + 1 && pathLen !== existingPathLen) {
-                throw new exports.JsonPatchError('Cannot perform an `add` operation at the desired path', 'OPERATION_PATH_CANNOT_ADD', index, operation, document);
-            }
-        }
-        else if (operation.op === 'replace' || operation.op === 'remove' || operation.op === '_get') {
-            if (operation.path !== existingPathFragment) {
-                throw new exports.JsonPatchError('Cannot perform the operation at a path that does not exist', 'OPERATION_PATH_UNRESOLVABLE', index, operation, document);
-            }
-        }
-        else if (operation.op === 'move' || operation.op === 'copy') {
-            var existingValue = { op: "_get", path: operation.from, value: undefined };
-            var error = validate([existingValue], document);
-            if (error && error.name === 'OPERATION_PATH_UNRESOLVABLE') {
-                throw new exports.JsonPatchError('Cannot perform the operation from a path that does not exist', 'OPERATION_FROM_UNRESOLVABLE', index, operation, document);
-            }
-        }
-    }
-}
-exports.validator = validator;
-/**
- * Validates a sequence of operations. If `document` parameter is provided, the sequence is additionally validated against the object document.
- * If error is encountered, returns a JsonPatchError object
- * @param sequence
- * @param document
- * @returns {JsonPatchError|undefined}
- */
-function validate(sequence, document, externalValidator) {
-    try {
-        if (!Array.isArray(sequence)) {
-            throw new exports.JsonPatchError('Patch sequence must be an array', 'SEQUENCE_NOT_AN_ARRAY');
-        }
-        if (document) {
-            //clone document and sequence so that we can safely try applying operations
-            applyPatch(helpers_1._deepClone(document), helpers_1._deepClone(sequence), externalValidator || true);
-        }
-        else {
-            externalValidator = externalValidator || validator;
-            for (var i = 0; i < sequence.length; i++) {
-                externalValidator(sequence[i], i, document, undefined);
-            }
-        }
-    }
-    catch (e) {
-        if (e instanceof exports.JsonPatchError) {
-            return e;
-        }
-        else {
-            throw e;
-        }
-    }
-}
-exports.validate = validate;
-/**
- * Default export for backwards compat
- */
-exports.default = {
-    JsonPatchError: exports.JsonPatchError,
-    deepClone: exports.deepClone,
-    getValueByPointer: getValueByPointer,
-    applyOperation: applyOperation,
-    applyPatch: applyPatch,
-    applyReducer: applyReducer,
-    validator: validator,
-    validate: validate
-};
-
-
-/***/ }),
+/* 150 */,
 /* 151 */,
 /* 152 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
@@ -3396,7 +2898,70 @@ module.exports = Promise;
 
 /***/ }),
 /* 155 */,
-/* 156 */,
+/* 156 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+/**
+ * Module dependencies
+ */
+var Hash = __webpack_require__(834).Hash,
+  Attributs = __webpack_require__(202).Attributs;
+
+/**
+ * Create a new edge
+ * @constructor
+ * @param {Graph} graph Parent Graph
+ * @param {String|Node} nodeOne The first node
+ * @param {String|Node} nodeTwo The second node
+ * @return {Edge}
+ * @api public
+ */
+var Edge = exports.Edge = function(graph, nodeOne, nodeTwo) {
+  this.relativeGraph = graph;
+  this.nodeOne = nodeOne;
+  this.nodeTwo = nodeTwo;
+  this.attributs = new Attributs("E");
+};
+
+/**
+ * Set an edge attribut
+ *
+ * @param {String} name The attribut name
+ * @param {Void} value The attribut value
+ * @api public
+ */
+Edge.prototype.set = function(name, value) {
+  this.attributs.set(name, value);
+  return this;
+};
+
+/**
+ * Get an edge attribut
+ *
+ * @param {String} name The attribut name
+ * @return {Void}
+ * @api public
+ */
+Edge.prototype.get = function(name) {
+  return this.attributs.get(name);
+};
+
+/**
+ * @api private
+ */
+Edge.prototype.to_dot = function() {
+  var edgeLink = "->";
+  if(this.relativeGraph.type === "graph") {
+    edgeLink = "--";
+  }
+  
+  var edgeOutput = '"' + this.nodeOne.id + '"' + " " + edgeLink + " " + '"' + this.nodeTwo.id + '"';
+  edgeOutput = edgeOutput + this.attributs.to_dot();
+  return edgeOutput;
+};
+
+
+/***/ }),
 /* 157 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
@@ -3550,33 +3115,7 @@ module.exports = Uint8Array;
 /***/ }),
 /* 162 */,
 /* 163 */,
-/* 164 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-const yaml = __webpack_require__(414)
-const path = __webpack_require__(622)
-const fs = __webpack_require__(747)
-
-const LIGHTSTEP_CONFIG_FILE = process.env.LIGHTSTEP_CONFIG_FILE || '.lightstep.yml'
-
-function configExists() {
-    return fs.existsSync(path.join(process.env.GITHUB_WORKSPACE, LIGHTSTEP_CONFIG_FILE))
-}
-
-function loadConfig() {
-    try {
-        let fileContents = fs.readFileSync(path.join(process.env.GITHUB_WORKSPACE, LIGHTSTEP_CONFIG_FILE), 'utf8')
-        const yamlConfig = yaml.safeLoadAll(fileContents)
-        return yamlConfig[0]
-    } catch (e) {
-        return { integrations : {} }
-    }
-}
-
-exports.configExists = configExists
-exports.loadConfig = loadConfig
-
-/***/ }),
+/* 164 */,
 /* 165 */,
 /* 166 */,
 /* 167 */,
@@ -3602,7 +3141,11 @@ exports.loadConfig = loadConfig
 exports.__esModule = true;
 exports.default = void 0;
 
+var _isEmpty = _interopRequireDefault(__webpack_require__(216));
+
 var _helpers = __webpack_require__(346);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 function ownKeys(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); keys.push.apply(keys, symbols); } return keys; }
 
@@ -3642,7 +3185,12 @@ var _default = {
 
       originalDefinitionObj = originalDefinitionObj[part];
     });
-    originalDefinitionObj = _objectSpread({}, originalDefinitionObj);
+    originalDefinitionObj = _objectSpread({}, originalDefinitionObj); // when we've lost sight, interrupt prematurely
+
+    if ((0, _isEmpty.default)(originalDefinitionObj)) {
+      return undefined;
+    }
+
     delete originalDefinitionObj.allOf;
     const patches = []; // remove existing content
 
@@ -3695,7 +3243,7 @@ exports.default = _default;
 /* 186 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
-var baseGetTag = __webpack_require__(190),
+var baseGetTag = __webpack_require__(51),
     isObjectLike = __webpack_require__(337);
 
 /** `Object#toString` result references. */
@@ -3733,16 +3281,617 @@ module.exports = isSymbol;
 /* 190 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
-var Symbol = __webpack_require__(498),
-    getRawTag = __webpack_require__(985),
-    objectToString = __webpack_require__(602);
+var baseIsEqualDeep = __webpack_require__(600),
+    isObjectLike = __webpack_require__(337);
+
+/**
+ * The base implementation of `_.isEqual` which supports partial comparisons
+ * and tracks traversed objects.
+ *
+ * @private
+ * @param {*} value The value to compare.
+ * @param {*} other The other value to compare.
+ * @param {boolean} bitmask The bitmask flags.
+ *  1 - Unordered comparison
+ *  2 - Partial comparison
+ * @param {Function} [customizer] The function to customize comparisons.
+ * @param {Object} [stack] Tracks traversed `value` and `other` objects.
+ * @returns {boolean} Returns `true` if the values are equivalent, else `false`.
+ */
+function baseIsEqual(value, other, bitmask, customizer, stack) {
+  if (value === other) {
+    return true;
+  }
+  if (value == null || other == null || (!isObjectLike(value) && !isObjectLike(other))) {
+    return value !== value && other !== other;
+  }
+  return baseIsEqualDeep(value, other, bitmask, customizer, baseIsEqual, stack);
+}
+
+module.exports = baseIsEqual;
+
+
+/***/ }),
+/* 191 */,
+/* 192 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+
+exports.__esModule = true;
+exports.default = void 0;
+
+var jsonPatch = _interopRequireWildcard(__webpack_require__(259));
+
+var _deepExtend = _interopRequireDefault(__webpack_require__(203));
+
+var _cloneDeep = _interopRequireDefault(__webpack_require__(769));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return null; var cache = new WeakMap(); _getRequireWildcardCache = function () { return cache; }; return cache; }
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
+
+function ownKeys(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); keys.push.apply(keys, symbols); } return keys; }
+
+function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i] != null ? arguments[i] : {}; if (i % 2) { ownKeys(Object(source), true).forEach(function (key) { _defineProperty(target, key, source[key]); }); } else if (Object.getOwnPropertyDescriptors) { Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)); } else { ownKeys(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } } return target; }
+
+function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
+var _default = {
+  add,
+  replace,
+  remove,
+  merge,
+  mergeDeep,
+  context,
+  getIn,
+  applyPatch,
+  parentPathMatch,
+  flatten,
+  fullyNormalizeArray,
+  normalizeArray,
+  isPromise,
+  forEachNew,
+  forEachNewPrimitive,
+  isJsonPatch,
+  isContextPatch,
+  isPatch,
+  isMutation,
+  isAdditiveMutation,
+  isGenerator,
+  isFunction,
+  isObject,
+  isError
+};
+exports.default = _default;
+
+function applyPatch(obj, patch, opts) {
+  opts = opts || {};
+  patch = _objectSpread(_objectSpread({}, patch), {}, {
+    path: patch.path && normalizeJSONPath(patch.path)
+  });
+
+  if (patch.op === 'merge') {
+    const newValue = getInByJsonPath(obj, patch.path);
+    Object.assign(newValue, patch.value);
+    jsonPatch.applyPatch(obj, [replace(patch.path, newValue)]);
+  } else if (patch.op === 'mergeDeep') {
+    const currentValue = getInByJsonPath(obj, patch.path); // Iterate the properties of the patch
+    // eslint-disable-next-line no-restricted-syntax, guard-for-in
+
+    for (const prop in patch.value) {
+      const propVal = patch.value[prop];
+      const isArray = Array.isArray(propVal);
+
+      if (isArray) {
+        // deepExtend doesn't merge arrays, so we will do it manually
+        const existing = currentValue[prop] || [];
+        currentValue[prop] = existing.concat(propVal);
+      } else if (isObject(propVal) && !isArray) {
+        // If it's an object, iterate it's keys and merge
+        // if there are conflicting keys, merge deep, otherwise shallow merge
+        let currentObj = _objectSpread({}, currentValue[prop]); // eslint-disable-next-line no-restricted-syntax
+
+
+        for (const key in propVal) {
+          if (Object.prototype.hasOwnProperty.call(currentObj, key)) {
+            // if there is a single conflicting key, just deepExtend the entire value
+            // and break from the loop (since all future keys are also merged)
+            // We do this because we can't deepExtend two primitives
+            // (currentObj[key] & propVal[key] may be primitives).
+            //
+            // we also deeply assign here, since we aren't in control of
+            // how deepExtend affects existing nested objects
+            currentObj = (0, _deepExtend.default)((0, _cloneDeep.default)(currentObj), propVal);
+            break;
+          } else {
+            Object.assign(currentObj, {
+              [key]: propVal[key]
+            });
+          }
+        }
+
+        currentValue[prop] = currentObj;
+      } else {
+        // It's a primitive, just replace existing
+        currentValue[prop] = propVal;
+      }
+    }
+  } else if (patch.op === 'add' && patch.path === '' && isObject(patch.value)) {
+    // { op: 'add', path: '', value: { a: 1, b: 2 }}
+    // has no effect: json patch refuses to do anything.
+    // so let's break that patch down into a set of patches,
+    // one for each key in the intended root value.
+    const patches = Object.keys(patch.value).reduce((arr, key) => {
+      arr.push({
+        op: 'add',
+        path: `/${normalizeJSONPath(key)}`,
+        value: patch.value[key]
+      });
+      return arr;
+    }, []);
+    jsonPatch.applyPatch(obj, patches);
+  } else if (patch.op === 'replace' && patch.path === '') {
+    let {
+      value
+    } = patch;
+
+    if (opts.allowMetaPatches && patch.meta && isAdditiveMutation(patch) && (Array.isArray(patch.value) || isObject(patch.value))) {
+      value = _objectSpread(_objectSpread({}, value), patch.meta);
+    }
+
+    obj = value;
+  } else {
+    jsonPatch.applyPatch(obj, [patch]); // Attach metadata to the resulting value.
+
+    if (opts.allowMetaPatches && patch.meta && isAdditiveMutation(patch) && (Array.isArray(patch.value) || isObject(patch.value))) {
+      const currentValue = getInByJsonPath(obj, patch.path);
+
+      const newValue = _objectSpread(_objectSpread({}, currentValue), patch.meta);
+
+      jsonPatch.applyPatch(obj, [replace(patch.path, newValue)]);
+    }
+  }
+
+  return obj;
+}
+
+function normalizeJSONPath(path) {
+  if (Array.isArray(path)) {
+    if (path.length < 1) {
+      return '';
+    }
+
+    return `/${path.map(item => {
+      // eslint-disable-line prefer-template
+      return (item + '').replace(/~/g, '~0').replace(/\//g, '~1'); // eslint-disable-line prefer-template
+    }).join('/')}`;
+  }
+
+  return path;
+} // =========================
+// JSON-Patch Wrappers
+// =========================
+
+
+function add(path, value) {
+  return {
+    op: 'add',
+    path,
+    value
+  };
+} // function _get(path) {
+//   return { op: '_get', path };
+// }
+
+
+function replace(path, value, meta) {
+  return {
+    op: 'replace',
+    path,
+    value,
+    meta
+  };
+}
+
+function remove(path) {
+  return {
+    op: 'remove',
+    path
+  };
+} // Custom wrappers
+
+
+function merge(path, value) {
+  return {
+    type: 'mutation',
+    op: 'merge',
+    path,
+    value
+  };
+} // Custom wrappers
+
+
+function mergeDeep(path, value) {
+  return {
+    type: 'mutation',
+    op: 'mergeDeep',
+    path,
+    value
+  };
+}
+
+function context(path, value) {
+  return {
+    type: 'context',
+    path,
+    value
+  };
+} // =========================
+// Iterators
+// =========================
+
+
+function forEachNew(mutations, fn) {
+  try {
+    return forEachNewPatch(mutations, forEach, fn);
+  } catch (e) {
+    return e;
+  }
+}
+
+function forEachNewPrimitive(mutations, fn) {
+  try {
+    return forEachNewPatch(mutations, forEachPrimitive, fn);
+  } catch (e) {
+    return e;
+  }
+}
+
+function forEachNewPatch(mutations, fn, callback) {
+  const res = mutations.filter(isAdditiveMutation).map(mutation => {
+    return fn(mutation.value, callback, mutation.path);
+  }) || [];
+  const flat = flatten(res);
+  const clean = cleanArray(flat);
+  return clean;
+}
+
+function forEachPrimitive(obj, fn, basePath) {
+  basePath = basePath || [];
+
+  if (Array.isArray(obj)) {
+    return obj.map((val, key) => {
+      return forEachPrimitive(val, fn, basePath.concat(key));
+    });
+  }
+
+  if (isObject(obj)) {
+    return Object.keys(obj).map(key => {
+      return forEachPrimitive(obj[key], fn, basePath.concat(key));
+    });
+  }
+
+  return fn(obj, basePath[basePath.length - 1], basePath);
+}
+
+function forEach(obj, fn, basePath) {
+  basePath = basePath || [];
+  let results = [];
+
+  if (basePath.length > 0) {
+    const newResults = fn(obj, basePath[basePath.length - 1], basePath);
+
+    if (newResults) {
+      results = results.concat(newResults);
+    }
+  }
+
+  if (Array.isArray(obj)) {
+    const arrayResults = obj.map((val, key) => {
+      return forEach(val, fn, basePath.concat(key));
+    });
+
+    if (arrayResults) {
+      results = results.concat(arrayResults);
+    }
+  } else if (isObject(obj)) {
+    const moreResults = Object.keys(obj).map(key => {
+      return forEach(obj[key], fn, basePath.concat(key));
+    });
+
+    if (moreResults) {
+      results = results.concat(moreResults);
+    }
+  }
+
+  results = flatten(results);
+  return results;
+} // =========================
+// Paths
+// =========================
+
+
+function parentPathMatch(path, arr) {
+  if (!Array.isArray(arr)) {
+    return false;
+  }
+
+  for (let i = 0, len = arr.length; i < len; i += 1) {
+    if (arr[i] !== path[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function getIn(obj, path) {
+  return path.reduce((val, token) => {
+    if (typeof token !== 'undefined' && val) {
+      return val[token];
+    }
+
+    return val;
+  }, obj);
+} // =========================
+// Array
+// =========================
+
+
+function fullyNormalizeArray(arr) {
+  return cleanArray(flatten(normalizeArray(arr)));
+}
+
+function normalizeArray(arr) {
+  return Array.isArray(arr) ? arr : [arr];
+}
+
+function flatten(arr) {
+  return [].concat(...arr.map(val => {
+    return Array.isArray(val) ? flatten(val) : val;
+  }));
+}
+
+function cleanArray(arr) {
+  return arr.filter(elm => typeof elm !== 'undefined');
+} // =========================
+// Is-Thing.
+// =========================
+
+
+function isObject(val) {
+  return val && typeof val === 'object';
+}
+
+function isPromise(val) {
+  return isObject(val) && isFunction(val.then);
+}
+
+function isFunction(val) {
+  return val && typeof val === 'function';
+}
+
+function isError(patch) {
+  return patch instanceof Error;
+}
+
+function isJsonPatch(patch) {
+  if (isPatch(patch)) {
+    const {
+      op
+    } = patch;
+    return op === 'add' || op === 'remove' || op === 'replace';
+  }
+
+  return false;
+}
+
+function isGenerator(thing) {
+  return Object.prototype.toString.call(thing) === '[object GeneratorFunction]';
+}
+
+function isMutation(patch) {
+  return isJsonPatch(patch) || isPatch(patch) && patch.type === 'mutation';
+}
+
+function isAdditiveMutation(patch) {
+  return isMutation(patch) && (patch.op === 'add' || patch.op === 'replace' || patch.op === 'merge' || patch.op === 'mergeDeep');
+}
+
+function isContextPatch(patch) {
+  return isPatch(patch) && patch.type === 'context';
+}
+
+function isPatch(patch) {
+  return patch && typeof patch === 'object';
+}
+
+function getInByJsonPath(obj, jsonPath) {
+  try {
+    return jsonPatch.getValueByPointer(obj, jsonPath);
+  } catch (e) {
+    console.error(e); // eslint-disable-line no-console
+
+    return {};
+  }
+}
+
+/***/ }),
+/* 193 */,
+/* 194 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+/**
+ * Lodash (Custom Build) <https://lodash.com/>
+ * Build: `lodash modularize exports="npm" -o ./`
+ * Copyright OpenJS Foundation and other contributors <https://openjsf.org/>
+ * Released under MIT license <https://lodash.com/license>
+ * Based on Underscore.js 1.8.3 <http://underscorejs.org/LICENSE>
+ * Copyright Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
+ */
+var reInterpolate = __webpack_require__(837);
+
+/** Used as references for various `Number` constants. */
+var INFINITY = 1 / 0;
 
 /** `Object#toString` result references. */
 var nullTag = '[object Null]',
+    symbolTag = '[object Symbol]',
     undefinedTag = '[object Undefined]';
 
+/** Used to match HTML entities and HTML characters. */
+var reUnescapedHtml = /[&<>"']/g,
+    reHasUnescapedHtml = RegExp(reUnescapedHtml.source);
+
+/** Used to match template delimiters. */
+var reEscape = /<%-([\s\S]+?)%>/g,
+    reEvaluate = /<%([\s\S]+?)%>/g;
+
+/** Used to map characters to HTML entities. */
+var htmlEscapes = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;'
+};
+
+/** Detect free variable `global` from Node.js. */
+var freeGlobal = typeof global == 'object' && global && global.Object === Object && global;
+
+/** Detect free variable `self`. */
+var freeSelf = typeof self == 'object' && self && self.Object === Object && self;
+
+/** Used as a reference to the global object. */
+var root = freeGlobal || freeSelf || Function('return this')();
+
+/**
+ * A specialized version of `_.map` for arrays without support for iteratee
+ * shorthands.
+ *
+ * @private
+ * @param {Array} [array] The array to iterate over.
+ * @param {Function} iteratee The function invoked per iteration.
+ * @returns {Array} Returns the new mapped array.
+ */
+function arrayMap(array, iteratee) {
+  var index = -1,
+      length = array == null ? 0 : array.length,
+      result = Array(length);
+
+  while (++index < length) {
+    result[index] = iteratee(array[index], index, array);
+  }
+  return result;
+}
+
+/**
+ * The base implementation of `_.propertyOf` without support for deep paths.
+ *
+ * @private
+ * @param {Object} object The object to query.
+ * @returns {Function} Returns the new accessor function.
+ */
+function basePropertyOf(object) {
+  return function(key) {
+    return object == null ? undefined : object[key];
+  };
+}
+
+/**
+ * Used by `_.escape` to convert characters to HTML entities.
+ *
+ * @private
+ * @param {string} chr The matched character to escape.
+ * @returns {string} Returns the escaped character.
+ */
+var escapeHtmlChar = basePropertyOf(htmlEscapes);
+
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty = objectProto.hasOwnProperty;
+
+/**
+ * Used to resolve the
+ * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
+ * of values.
+ */
+var nativeObjectToString = objectProto.toString;
+
 /** Built-in value references. */
-var symToStringTag = Symbol ? Symbol.toStringTag : undefined;
+var Symbol = root.Symbol,
+    symToStringTag = Symbol ? Symbol.toStringTag : undefined;
+
+/** Used to convert symbols to primitives and strings. */
+var symbolProto = Symbol ? Symbol.prototype : undefined,
+    symbolToString = symbolProto ? symbolProto.toString : undefined;
+
+/**
+ * By default, the template delimiters used by lodash are like those in
+ * embedded Ruby (ERB) as well as ES2015 template strings. Change the
+ * following template settings to use alternative delimiters.
+ *
+ * @static
+ * @memberOf _
+ * @type {Object}
+ */
+var templateSettings = {
+
+  /**
+   * Used to detect `data` property values to be HTML-escaped.
+   *
+   * @memberOf _.templateSettings
+   * @type {RegExp}
+   */
+  'escape': reEscape,
+
+  /**
+   * Used to detect code to be evaluated.
+   *
+   * @memberOf _.templateSettings
+   * @type {RegExp}
+   */
+  'evaluate': reEvaluate,
+
+  /**
+   * Used to detect `data` property values to inject.
+   *
+   * @memberOf _.templateSettings
+   * @type {RegExp}
+   */
+  'interpolate': reInterpolate,
+
+  /**
+   * Used to reference the data object in the template text.
+   *
+   * @memberOf _.templateSettings
+   * @type {string}
+   */
+  'variable': '',
+
+  /**
+   * Used to import variables into the compiled template.
+   *
+   * @memberOf _.templateSettings
+   * @type {Object}
+   */
+  'imports': {
+
+    /**
+     * A reference to the `lodash` function.
+     *
+     * @memberOf _.templateSettings.imports
+     * @type {Function}
+     */
+    '_': { 'escape': escape }
+  }
+};
 
 /**
  * The base implementation of `getTag` without fallbacks for buggy environments.
@@ -3760,96 +3909,207 @@ function baseGetTag(value) {
     : objectToString(value);
 }
 
-module.exports = baseGetTag;
+/**
+ * The base implementation of `_.toString` which doesn't convert nullish
+ * values to empty strings.
+ *
+ * @private
+ * @param {*} value The value to process.
+ * @returns {string} Returns the string.
+ */
+function baseToString(value) {
+  // Exit early for strings to avoid a performance hit in some environments.
+  if (typeof value == 'string') {
+    return value;
+  }
+  if (isArray(value)) {
+    // Recursively convert values (susceptible to call stack limits).
+    return arrayMap(value, baseToString) + '';
+  }
+  if (isSymbol(value)) {
+    return symbolToString ? symbolToString.call(value) : '';
+  }
+  var result = (value + '');
+  return (result == '0' && (1 / value) == -INFINITY) ? '-0' : result;
+}
+
+/**
+ * A specialized version of `baseGetTag` which ignores `Symbol.toStringTag` values.
+ *
+ * @private
+ * @param {*} value The value to query.
+ * @returns {string} Returns the raw `toStringTag`.
+ */
+function getRawTag(value) {
+  var isOwn = hasOwnProperty.call(value, symToStringTag),
+      tag = value[symToStringTag];
+
+  try {
+    value[symToStringTag] = undefined;
+    var unmasked = true;
+  } catch (e) {}
+
+  var result = nativeObjectToString.call(value);
+  if (unmasked) {
+    if (isOwn) {
+      value[symToStringTag] = tag;
+    } else {
+      delete value[symToStringTag];
+    }
+  }
+  return result;
+}
+
+/**
+ * Converts `value` to a string using `Object.prototype.toString`.
+ *
+ * @private
+ * @param {*} value The value to convert.
+ * @returns {string} Returns the converted string.
+ */
+function objectToString(value) {
+  return nativeObjectToString.call(value);
+}
+
+/**
+ * Checks if `value` is classified as an `Array` object.
+ *
+ * @static
+ * @memberOf _
+ * @since 0.1.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is an array, else `false`.
+ * @example
+ *
+ * _.isArray([1, 2, 3]);
+ * // => true
+ *
+ * _.isArray(document.body.children);
+ * // => false
+ *
+ * _.isArray('abc');
+ * // => false
+ *
+ * _.isArray(_.noop);
+ * // => false
+ */
+var isArray = Array.isArray;
+
+/**
+ * Checks if `value` is object-like. A value is object-like if it's not `null`
+ * and has a `typeof` result of "object".
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is object-like, else `false`.
+ * @example
+ *
+ * _.isObjectLike({});
+ * // => true
+ *
+ * _.isObjectLike([1, 2, 3]);
+ * // => true
+ *
+ * _.isObjectLike(_.noop);
+ * // => false
+ *
+ * _.isObjectLike(null);
+ * // => false
+ */
+function isObjectLike(value) {
+  return value != null && typeof value == 'object';
+}
+
+/**
+ * Checks if `value` is classified as a `Symbol` primitive or object.
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is a symbol, else `false`.
+ * @example
+ *
+ * _.isSymbol(Symbol.iterator);
+ * // => true
+ *
+ * _.isSymbol('abc');
+ * // => false
+ */
+function isSymbol(value) {
+  return typeof value == 'symbol' ||
+    (isObjectLike(value) && baseGetTag(value) == symbolTag);
+}
+
+/**
+ * Converts `value` to a string. An empty string is returned for `null`
+ * and `undefined` values. The sign of `-0` is preserved.
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to convert.
+ * @returns {string} Returns the converted string.
+ * @example
+ *
+ * _.toString(null);
+ * // => ''
+ *
+ * _.toString(-0);
+ * // => '-0'
+ *
+ * _.toString([1, 2, 3]);
+ * // => '1,2,3'
+ */
+function toString(value) {
+  return value == null ? '' : baseToString(value);
+}
+
+/**
+ * Converts the characters "&", "<", ">", '"', and "'" in `string` to their
+ * corresponding HTML entities.
+ *
+ * **Note:** No other characters are escaped. To escape additional
+ * characters use a third-party library like [_he_](https://mths.be/he).
+ *
+ * Though the ">" character is escaped for symmetry, characters like
+ * ">" and "/" don't need escaping in HTML and have no special meaning
+ * unless they're part of a tag or unquoted attribute value. See
+ * [Mathias Bynens's article](https://mathiasbynens.be/notes/ambiguous-ampersands)
+ * (under "semi-related fun fact") for more details.
+ *
+ * When working with HTML you should always
+ * [quote attribute values](http://wonko.com/post/html-escaping) to reduce
+ * XSS vectors.
+ *
+ * @static
+ * @since 0.1.0
+ * @memberOf _
+ * @category String
+ * @param {string} [string=''] The string to escape.
+ * @returns {string} Returns the escaped string.
+ * @example
+ *
+ * _.escape('fred, barney, & pebbles');
+ * // => 'fred, barney, &amp; pebbles'
+ */
+function escape(string) {
+  string = toString(string);
+  return (string && reHasUnescapedHtml.test(string))
+    ? string.replace(reUnescapedHtml, escapeHtmlChar)
+    : string;
+}
+
+module.exports = templateSettings;
 
 
 /***/ }),
-/* 191 */,
-/* 192 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-const lightstepSdk = __webpack_require__(917)
-
-const LIGHTSTEP_WEB_HOST = 'app.lightstep.com'
-
-const getApiContext = async ({lightstepProj, lightstepOrg, lightstepToken, lightstepConditions = []}) => {
-    const apiClient = await lightstepSdk.init(lightstepOrg, lightstepToken)
-    // if no conditions are specified, use all conditions from project
-    if (lightstepConditions.length === 0) {
-        const conditionsResponse = await apiClient.sdk.apis.Conditions.listConditionsID({
-            organization : lightstepOrg,
-            project      : lightstepProj
-        })
-        lightstepConditions = conditionsResponse.body.data.map(c => c.id)
-    }
-
-    const conditionStatusPromises = lightstepConditions.map(id => apiClient.sdk.apis.Conditions.getConditionStatusID({
-        'condition-id' : id,
-        organization   : lightstepOrg,
-        project        : lightstepProj
-    })
-    )
-    const conditionStatusResponses = await Promise.all(conditionStatusPromises)
-    const conditionStatuses = conditionStatusResponses.map(s => {
-        const cleanId = s.body.data.id.replace('-status', '')
-        return {
-            id    : cleanId,
-            name  : s.body.data.attributes.expression,
-            state : s.body.data.attributes.state
-        }
-    })
-    return conditionStatuses
-}
-
-const ICON_IMG = "https://user-images.githubusercontent.com/27153/90803298-6510e300-e2cd-11ea-91fa-5795a4481e20.png"
-
-exports.getSummary = async ({lightstepProj, lightstepOrg, lightstepToken, lightstepConditions}) => {
-    try {
-        const context = await getApiContext({lightstepProj, lightstepOrg, lightstepToken, lightstepConditions})
-
-        // todo: handle no conditions
-
-        var status = "unknown"
-        var message = "Condition status is unknown"
-        const details = context.map(c => {
-            return { message : `${c.name}: ${c.state}` }
-        })
-        const summaryLink = `https://${LIGHTSTEP_WEB_HOST}/${lightstepProj}/monitoring/conditions`
-        const noViolations = context.filter(c => c.state === 'false')
-        const violated = context.filter(c => c.state === 'true')
-
-        if (noViolations.length === context.length) {
-            status = "ok"
-            message = "No conditions have violations"
-        } else if (violated.length > 1) {
-            status = "error"
-            message = "Condition(s) have violations"
-        }
-
-        return {
-            status,
-            message,
-            summaryLink,
-            details,
-            context,
-            logo : ICON_IMG
-        }
-    } catch (e) {
-        return {
-            status      : "unknown",
-            message     : `Lightstep API Error: ${e.message}`,
-            summaryLink : "https://lightstep.com",
-            details     : [],
-            logo        : ICON_IMG
-        }
-    }
-
-}
-
-
-/***/ }),
-/* 193 */,
-/* 194 */,
 /* 195 */,
 /* 196 */,
 /* 197 */,
@@ -3857,7 +4117,266 @@ exports.getSummary = async ({lightstepProj, lightstepOrg, lightstepToken, lights
 /* 199 */,
 /* 200 */,
 /* 201 */,
-/* 202 */,
+/* 202 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+var Hash = __webpack_require__(834).Hash,
+    util = __webpack_require__(669);
+
+var attrs = {
+  "Damping" :            { "usage" : "G",    "type" : "double" },
+  "K" :                  { "usage" : "GC",   "type" : "double" },
+  "URL" :                { "usage" : "ENGC", "type" : "escString" },
+  "area" :               { "usage" : "NC",   "type" : "double" },
+  "arrowhead" :          { "usage" : "E",    "type" : "arrowType" },
+  "arrowsize" :          { "usage" : "E",    "type" : "double" },
+  "arrowtail" :          { "usage" : "E",    "type" : "arrowType" },
+  "aspect" :             { "usage" : "G",    "type" : "aspectType" },
+  "bb" :                 { "usage" : "G",    "type" : "rect" },
+  "bgcolor" :            { "usage" : "GC",   "type" : "color" },
+  "center" :             { "usage" : "G",    "type" : "bool" },
+  "charset" :            { "usage" : "G",    "type" : "string" },
+  "clusterrank" :        { "usage" : "G",    "type" : "clusterMode" },
+  "color" :              { "usage" : "ENC",  "type" : "color" },
+  "colorscheme" :        { "usage" : "ENCG", "type" : "string" },
+  "comment" :            { "usage" : "ENG",  "type" : "string" },
+  "compound" :           { "usage" : "G",    "type" : "bool" },
+  "concentrate" :        { "usage" : "G",    "type" : "bool" },
+  "constraint" :         { "usage" : "E",    "type" : "bool" },
+  "decorate" :           { "usage" : "E",    "type" : "bool" },
+  "defaultdist" :        { "usage" : "G",    "type" : "double" },
+  "dim" :                { "usage" : "G",    "type" : "int" },
+  "dimen" :              { "usage" : "G",    "type" : "int" },
+  "dir" :                { "usage" : "E",    "type" : "dirType" },
+  "diredgeconstraints" : { "usage" : "G",    "type" : "string" },
+  "distortion" :         { "usage" : "N",    "type" : "double" },
+  "dpi" :                { "usage" : "G",    "type" : "double" },
+  "edgeURL" :            { "usage" : "E",    "type" : "escString" },
+  "edgehref" :           { "usage" : "E",    "type" : "escString" },
+  "edgetarget" :         { "usage" : "E",    "type" : "escString" },
+  "edgetooltip" :        { "usage" : "E",    "type" : "escString" },
+  "epsilon" :            { "usage" : "G",    "type" : "double" },
+  "esep" :               { "usage" : "G",    "type" : "double" },
+  "fillcolor" :          { "usage" : "NEC",  "type" : "color" },
+  "fixedsize" :          { "usage" : "N",    "type" : "bool" },
+  "fontcolor" :          { "usage" : "ENGC", "type" : "color" },
+  "fontname" :           { "usage" : "ENGC", "type" : "string" },
+  "fontnames" :          { "usage" : "G",    "type" : "string" },
+  "fontpath" :           { "usage" : "G",    "type" : "string" },
+  "fontsize" :           { "usage" : "ENGC", "type" : "double" },
+  "group" :              { "usage" : "N",    "type" : "string" },
+  "headURL" :            { "usage" : "E",    "type" : "escString" },
+  "headclip" :           { "usage" : "E",    "type" : "bool" },
+  "headhref" :           { "usage" : "E",    "type" : "escString" },
+  "headlabel" :          { "usage" : "E",    "type" : "lblString" },
+  "headport" :           { "usage" : "E",    "type" : "portPos" },
+  "headtarget" :         { "usage" : "E",    "type" : "escString" },
+  "headtooltip" :        { "usage" : "E",    "type" : "escString" },
+  "height" :             { "usage" : "N",    "type" : "double" },
+  "href" :               { "usage" : "ENGC", "type" : "escString" },
+  "id" :                 { "usage" : "GNE",  "type" : "lblString" },
+  "image" :              { "usage" : "N",    "type" : "string" },
+  "imagepath" :          { "usage" : "G",    "type" : "string" },
+  "imagescale" :         { "usage" : "N",    "type" : "string" },
+  "label" :              { "usage" : "ENGC", "type" : "lblString" },
+  "labelURL" :           { "usage" : "E",    "type" : "escString" },
+  "labelangle" :         { "usage" : "E",    "type" : "double" },
+  "labeldistance" :      { "usage" : "E",    "type" : "double" },
+  "labelfloat" :         { "usage" : "E",    "type" : "bool" },
+  "labelfontcolor" :     { "usage" : "E",    "type" : "color" },
+  "labelfontname" :      { "usage" : "E",    "type" : "string" },
+  "labelfontsize" :      { "usage" : "E",    "type" : "double" },
+  "labelhref" :          { "usage" : "E",    "type" : "escString" },
+  "labeljust" :          { "usage" : "GC",   "type" : "string" },
+  "labelloc" :           { "usage" : "NGC",  "type" : "string" },
+  "labeltarget" :        { "usage" : "E",    "type" : "escString" },
+  "labeltooltip" :       { "usage" : "E",    "type" : "escString" },
+  "landscape" :          { "usage" : "G",    "type" : "bool" },
+  "layer" :              { "usage" : "ENC",  "type" : "layerRange" },
+  "layerlistsep" :       { "usage" : "G",    "type" : "string" },
+  "layers" :             { "usage" : "G",    "type" : "layerList" },
+  "layerselect" :        { "usage" : "G",    "type" : "layerRange" },
+  "layersep" :           { "usage" : "G",    "type" : "string" },
+  "layout" :             { "usage" : "G",    "type" : "string" },
+  "len" :                { "usage" : "E",    "type" : "double" },
+  "levels" :             { "usage" : "G",    "type" : "int" },
+  "levelsgap" :          { "usage" : "G",    "type" : "double" },
+  "lhead" :              { "usage" : "E",    "type" : "string" },
+  "lheight" :            { "usage" : "GC",   "type" : "double" },
+  "lp" :                 { "usage" : "EGC",  "type" : "point" },
+  "ltail" :              { "usage" : "E",    "type" : "string" },
+  "lwidth" :             { "usage" : "GC",   "type" : "double" },
+  "margin" :             { "usage" : "NGC",  "type" : "pointf" },
+  "maxiter" :            { "usage" : "G",    "type" : "int" },
+  "mclimit" :            { "usage" : "G",    "type" : "double" },
+  "mindist" :            { "usage" : "G",    "type" : "double" },
+  "minlen" :             { "usage" : "E",    "type" : "int" },
+  "mode" :               { "usage" : "G",    "type" : "string" },
+  "model" :              { "usage" : "G",    "type" : "string" },
+  "mosek" :              { "usage" : "G",    "type" : "bool" },
+  "nodesep" :            { "usage" : "G",    "type" : "double" },
+  "nojustify" :          { "usage" : "GCNE", "type" : "bool" },
+  "normalize" :          { "usage" : "G",    "type" : "bool" },
+  "nslimit" :            { "usage" : "G",    "type" : "double" },
+  "nslimit1" :           { "usage" : "G",    "type" : "double" },
+  "ordering" :           { "usage" : "GN",   "type" : "string" },
+  "orientation" :        { "usage" : "GN",   "type" : "string" },
+  "outputorder" :        { "usage" : "G",    "type" : "outputMode" },
+  "overlap" :            { "usage" : "G",    "type" : "string" },
+  "overlap_scaling" :    { "usage" : "G",    "type" : "double" },
+  "pack" :               { "usage" : "G",    "type" : "int" },
+  "packmode" :           { "usage" : "G",    "type" : "packMode" },
+  "pad" :                { "usage" : "G",    "type" : "pointf" },
+  "page" :               { "usage" : "G",    "type" : "pointf" },
+  "pagedir" :            { "usage" : "G",    "type" : "pagedir" },
+  "pencolor" :           { "usage" : "C",    "type" : "color" },
+  "penwidth" :           { "usage" : "CNE",  "type" : "double" },
+  "peripheries" :        { "usage" : "NC",   "type" : "int" },
+  "pin" :                { "usage" : "N",    "type" : "bool" },
+  "pos" :                { "usage" : "EN",   "type" : "point" },
+  "quadtree" :           { "usage" : "G",    "type" : "quadType" },
+  "quantum" :            { "usage" : "G",    "type" : "double" },
+  "rank" :               { "usage" : "S",    "type" : "rankType" },
+  "rankdir" :            { "usage" : "G",    "type" : "rankdir" },
+  "ranksep" :            { "usage" : "G",    "type" : "double" },
+  "ratio" :              { "usage" : "G",    "type" : "string" },
+  "rects" :              { "usage" : "N",    "type" : "rect" },
+  "regular" :            { "usage" : "N",    "type" : "bool" },
+  "remincross" :         { "usage" : "G",    "type" : "bool" },
+  "repulsiveforce" :     { "usage" : "G",    "type" : "double" },
+  "resolution" :         { "usage" : "G",    "type" : "double" },
+  "root" :               { "usage" : "GN",   "type" : "string" },
+  "rotate" :             { "usage" : "G",    "type" : "int" },
+  "rotation" :           { "usage" : "G",    "type" : "double" },
+  "samehead" :           { "usage" : "E",    "type" : "string" },
+  "sametail" :           { "usage" : "E",    "type" : "string" },
+  "samplepoints" :       { "usage" : "N",    "type" : "int" },
+  "scale" :              { "usage" : "G",    "type" : "double" },
+  "searchsize" :         { "usage" : "G",    "type" : "int" },
+  "sep" :                { "usage" : "G",    "type" : "double" },
+  "shape" :              { "usage" : "N",    "type" : "shape" },
+  "shapefile" :          { "usage" : "N",    "type" : "string" },
+  "showboxes" :          { "usage" : "ENG",  "type" : "int" },
+  "sides" :              { "usage" : "N",    "type" : "int" },
+  "size" :               { "usage" : "G",    "type" : "pointf" },
+  "skew" :               { "usage" : "N",    "type" : "double" },
+  "smoothing" :          { "usage" : "G",    "type" : "smoothType" },
+  "sortv" :              { "usage" : "GCN",  "type" : "int" },
+  "splines" :            { "usage" : "G",    "type" : "string" },
+  "start" :              { "usage" : "G",    "type" : "startType" },
+  "style" :              { "usage" : "ENCG", "type" : "style" },
+  "stylesheet" :         { "usage" : "G",    "type" : "string" },
+  "tail_lp" :            { "usage" : "E",    "type" : "pointf" },
+  "tailURL" :            { "usage" : "E",    "type" : "escString" },
+  "tailclip" :           { "usage" : "E",    "type" : "bool" },
+  "tailhref" :           { "usage" : "E",    "type" : "escString" },
+  "taillabel" :          { "usage" : "E",    "type" : "lblString" },
+  "tailport" :           { "usage" : "E",    "type" : "portPos" },
+  "tailtarget" :         { "usage" : "E",    "type" : "escString" },
+  "tailtooltip" :        { "usage" : "E",    "type" : "escString" },
+  "target" :             { "usage" : "ENGC", "type" : "escString" },
+  "tooltip" :            { "usage" : "NEC",  "type" : "escString" },
+  "truecolor" :          { "usage" : "G",    "type" : "bool" },
+  "vertices" :           { "usage" : "N",    "type" : "pointfList" },
+  "viewport" :           { "usage" : "G",    "type" : "viewPort" },
+  "voro_margin" :        { "usage" : "G",    "type" : "double" },
+  "weight" :             { "usage" : "E",    "type" : "double" },
+  "width" :              { "usage" : "N",    "type" : "double" },
+  "xlabel" :             { "usage" : "EN",   "type" : "lblString" },
+  "z" :                  { "usage" : "N",    "type" : "double" }
+};
+
+var gType = {
+  "E" : "edge",
+  "N" : "node",
+  "G" : "graph",
+  "C" : "cluster"
+};
+
+var quotedTypes = [
+  "escString",
+  "rect",
+  "color",
+  "colorList",
+  "string",
+  "lblString",
+  "portPos",
+  "point",
+  "pointf",
+  "pointfList",
+  "splineType",
+  "style",
+  "viewPort"
+];
+
+function mustBeQuoted(data) {
+  return(quotedTypes.indexOf(attrs[data].type) !== -1);
+}
+
+function quoteMe(attr, value) {
+  if(value[0] === '!') {
+    return ('<' + value.substr(1,1000) + '>');
+  }
+  else if(mustBeQuoted(attr)) {
+    return(' "' + value + '"');
+  } else {
+    return(value);
+  }
+}
+
+function validateAttribut(name, type) {
+  if(attrs[name]) {
+    return(attrs[name].usage.indexOf(type) > -1);
+  } else {
+    return(false);
+  }
+}
+
+exports.isValid = function(name, type) {
+	return validateAttribut(name, type);
+};
+
+var Attributs = exports.Attributs = function(t) {
+  this._type = t;
+  this.attributs = new Hash();
+};
+
+Attributs.prototype.length = function() {
+  return(this.attributs.length);
+};
+
+Attributs.prototype.set = function(name, value) {
+  if(validateAttribut(name, this._type) === false) {
+    util.debug("Warning : Invalid attribut `" + name + "' for a " + gType[this._type]);
+    // throw "Invalid attribut `"+name+"' for a "+gType[this._type]
+  }
+  this.attributs.setItem(name, value);
+};
+
+Attributs.prototype.get = function(name) {
+  return this.attributs.items[name];
+};
+
+Attributs.prototype.to_dot = function(link) {
+  var attrsOutput = "",
+		sep = "";
+  
+  if(this.attributs.length > 0) {
+    attrsOutput = attrsOutput + " [ ";
+    for(var name in this.attributs.items) {
+      if (this.attributs.items.hasOwnProperty(name)) {
+        attrsOutput = attrsOutput + sep + name + " =" + quoteMe(name, this.attributs.items[name]);
+        sep = ", ";
+      }
+    }
+    attrsOutput = attrsOutput + " ]";
+  }
+  
+  return attrsOutput;
+};
+
+
+/***/ }),
 /* 203 */
 /***/ (function(module) {
 
@@ -4022,7 +4541,7 @@ var deepExtend = module.exports = function (/*obj_1, [obj_2], [obj_N]*/) {
 /* 208 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
-var baseGetTag = __webpack_require__(190),
+var baseGetTag = __webpack_require__(51),
     isObjectLike = __webpack_require__(337);
 
 /** `Object#toString` result references. */
@@ -4067,7 +4586,89 @@ module.exports = require("https");
 /* 213 */,
 /* 214 */,
 /* 215 */,
-/* 216 */,
+/* 216 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var baseKeys = __webpack_require__(351),
+    getTag = __webpack_require__(700),
+    isArguments = __webpack_require__(460),
+    isArray = __webpack_require__(143),
+    isArrayLike = __webpack_require__(146),
+    isBuffer = __webpack_require__(546),
+    isPrototype = __webpack_require__(514),
+    isTypedArray = __webpack_require__(850);
+
+/** `Object#toString` result references. */
+var mapTag = '[object Map]',
+    setTag = '[object Set]';
+
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty = objectProto.hasOwnProperty;
+
+/**
+ * Checks if `value` is an empty object, collection, map, or set.
+ *
+ * Objects are considered empty if they have no own enumerable string keyed
+ * properties.
+ *
+ * Array-like values such as `arguments` objects, arrays, buffers, strings, or
+ * jQuery-like collections are considered empty if they have a `length` of `0`.
+ * Similarly, maps and sets are considered empty if they have a `size` of `0`.
+ *
+ * @static
+ * @memberOf _
+ * @since 0.1.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is empty, else `false`.
+ * @example
+ *
+ * _.isEmpty(null);
+ * // => true
+ *
+ * _.isEmpty(true);
+ * // => true
+ *
+ * _.isEmpty(1);
+ * // => true
+ *
+ * _.isEmpty([1, 2, 3]);
+ * // => false
+ *
+ * _.isEmpty({ 'a': 1 });
+ * // => false
+ */
+function isEmpty(value) {
+  if (value == null) {
+    return true;
+  }
+  if (isArrayLike(value) &&
+      (isArray(value) || typeof value == 'string' || typeof value.splice == 'function' ||
+        isBuffer(value) || isTypedArray(value) || isArguments(value))) {
+    return !value.length;
+  }
+  var tag = getTag(value);
+  if (tag == mapTag || tag == setTag) {
+    return !value.size;
+  }
+  if (isPrototype(value)) {
+    return !baseKeys(value).length;
+  }
+  for (var key in value) {
+    if (hasOwnProperty.call(value, key)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+module.exports = isEmpty;
+
+
+/***/ }),
 /* 217 */
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
@@ -4085,7 +4686,7 @@ var _querystringBrowser = _interopRequireDefault(__webpack_require__(830));
 
 var _url = _interopRequireDefault(__webpack_require__(835));
 
-var _ = _interopRequireDefault(__webpack_require__(303));
+var _ = _interopRequireDefault(__webpack_require__(192));
 
 var _createError = _interopRequireDefault(__webpack_require__(52));
 
@@ -5116,7 +5717,7 @@ function tryDecode(str, decode) {
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
 var Stack = __webpack_require__(598),
-    baseIsEqual = __webpack_require__(387);
+    baseIsEqual = __webpack_require__(190);
 
 /** Used to compose bitmasks for value comparisons. */
 var COMPARE_PARTIAL_FLAG = 1,
@@ -5182,194 +5783,24 @@ module.exports = baseIsMatch;
 /***/ }),
 /* 256 */,
 /* 257 */,
-/* 258 */
-/***/ (function(__unusedmodule, exports) {
+/* 258 */,
+/* 259 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
 
-/*!
- * https://github.com/Starcounter-Jack/JSON-Patch
- * (c) 2017 Joachim Wester
- * MIT license
- */
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = function (d, b) {
-        extendStatics = Object.setPrototypeOf ||
-            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-        return extendStatics(d, b);
-    };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-var _hasOwnProperty = Object.prototype.hasOwnProperty;
-function hasOwnProperty(obj, key) {
-    return _hasOwnProperty.call(obj, key);
-}
-exports.hasOwnProperty = hasOwnProperty;
-function _objectKeys(obj) {
-    if (Array.isArray(obj)) {
-        var keys = new Array(obj.length);
-        for (var k = 0; k < keys.length; k++) {
-            keys[k] = "" + k;
-        }
-        return keys;
-    }
-    if (Object.keys) {
-        return Object.keys(obj);
-    }
-    var keys = [];
-    for (var i in obj) {
-        if (hasOwnProperty(obj, i)) {
-            keys.push(i);
-        }
-    }
-    return keys;
-}
-exports._objectKeys = _objectKeys;
-;
-/**
-* Deeply clone the object.
-* https://jsperf.com/deep-copy-vs-json-stringify-json-parse/25 (recursiveDeepCopy)
-* @param  {any} obj value to clone
-* @return {any} cloned obj
-*/
-function _deepClone(obj) {
-    switch (typeof obj) {
-        case "object":
-            return JSON.parse(JSON.stringify(obj)); //Faster than ES5 clone - http://jsperf.com/deep-cloning-of-objects/5
-        case "undefined":
-            return null; //this is how JSON.stringify behaves for array items
-        default:
-            return obj; //no need to clone primitives
-    }
-}
-exports._deepClone = _deepClone;
-//3x faster than cached /^\d+$/.test(str)
-function isInteger(str) {
-    var i = 0;
-    var len = str.length;
-    var charCode;
-    while (i < len) {
-        charCode = str.charCodeAt(i);
-        if (charCode >= 48 && charCode <= 57) {
-            i++;
-            continue;
-        }
-        return false;
-    }
-    return true;
-}
-exports.isInteger = isInteger;
-/**
-* Escapes a json pointer path
-* @param path The raw pointer
-* @return the Escaped path
-*/
-function escapePathComponent(path) {
-    if (path.indexOf('/') === -1 && path.indexOf('~') === -1)
-        return path;
-    return path.replace(/~/g, '~0').replace(/\//g, '~1');
-}
-exports.escapePathComponent = escapePathComponent;
-/**
- * Unescapes a json pointer path
- * @param path The escaped pointer
- * @return The unescaped path
- */
-function unescapePathComponent(path) {
-    return path.replace(/~1/g, '/').replace(/~0/g, '~');
-}
-exports.unescapePathComponent = unescapePathComponent;
-function _getPathRecursive(root, obj) {
-    var found;
-    for (var key in root) {
-        if (hasOwnProperty(root, key)) {
-            if (root[key] === obj) {
-                return escapePathComponent(key) + '/';
-            }
-            else if (typeof root[key] === 'object') {
-                found = _getPathRecursive(root[key], obj);
-                if (found != '') {
-                    return escapePathComponent(key) + '/' + found;
-                }
-            }
-        }
-    }
-    return '';
-}
-exports._getPathRecursive = _getPathRecursive;
-function getPath(root, obj) {
-    if (root === obj) {
-        return '/';
-    }
-    var path = _getPathRecursive(root, obj);
-    if (path === '') {
-        throw new Error("Object not found in root");
-    }
-    return '/' + path;
-}
-exports.getPath = getPath;
-/**
-* Recursively checks whether an object has any undefined values inside.
-*/
-function hasUndefined(obj) {
-    if (obj === undefined) {
-        return true;
-    }
-    if (obj) {
-        if (Array.isArray(obj)) {
-            for (var i = 0, len = obj.length; i < len; i++) {
-                if (hasUndefined(obj[i])) {
-                    return true;
-                }
-            }
-        }
-        else if (typeof obj === "object") {
-            var objKeys = _objectKeys(obj);
-            var objKeysLength = objKeys.length;
-            for (var i = 0; i < objKeysLength; i++) {
-                if (hasUndefined(obj[objKeys[i]])) {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
-exports.hasUndefined = hasUndefined;
-function patchErrorMessageFormatter(message, args) {
-    var messageParts = [message];
-    for (var key in args) {
-        var value = typeof args[key] === 'object' ? JSON.stringify(args[key], null, 2) : args[key]; // pretty print
-        if (typeof value !== 'undefined') {
-            messageParts.push(key + ": " + value);
-        }
-    }
-    return messageParts.join('\n');
-}
-var PatchError = /** @class */ (function (_super) {
-    __extends(PatchError, _super);
-    function PatchError(message, name, index, operation, tree) {
-        var _newTarget = this.constructor;
-        var _this = _super.call(this, patchErrorMessageFormatter(message, { name: name, index: index, operation: operation, tree: tree })) || this;
-        _this.name = name;
-        _this.index = index;
-        _this.operation = operation;
-        _this.tree = tree;
-        Object.setPrototypeOf(_this, _newTarget.prototype); // restore prototype chain, see https://stackoverflow.com/a/48342359
-        _this.message = patchErrorMessageFormatter(message, { name: name, index: index, operation: operation, tree: tree });
-        return _this;
-    }
-    return PatchError;
-}(Error));
-exports.PatchError = PatchError;
+var core = __webpack_require__(383);
+Object.assign(exports, core);
+
+var duplex = __webpack_require__(287);
+Object.assign(exports, duplex);
+
+var helpers = __webpack_require__(41);
+exports.JsonPatchError = helpers.PatchError;
+exports.deepClone = helpers._deepClone;
+exports.escapePathComponent = helpers.escapePathComponent;
+exports.unescapePathComponent = helpers.unescapePathComponent;
 
 
 /***/ }),
-/* 259 */,
 /* 260 */,
 /* 261 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
@@ -5400,7 +5831,102 @@ module.exports = hashSet;
 
 
 /***/ }),
-/* 262 */,
+/* 262 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+const fetch = __webpack_require__(454)
+
+const ROLLBAR_API = 'https://api.rollbar.com'
+
+
+const getApiContext = async ({token, environment}) => {
+    const HEADERS = { "X-Rollbar-Access-Token" : token }
+    const deployResponse = await fetch(`${ROLLBAR_API}/api/1/deploys`, { headers : HEADERS })
+    if (deployResponse.status !== 200) {
+        throw new Error(`Rollbar API Error: ${deployResponse.status}`)
+    }
+
+    const deploys = await deployResponse.json()
+
+    if (deploys.err === 1) {
+        throw new Error(deploys.message)
+    }
+
+    if (deploys.err === 0 && deploys.result.deploys.length === 0 ){
+        return null
+    }
+
+    const lastDeploy = deploys.result.deploys[0]
+    const versionsResponse =
+        await fetch(`${ROLLBAR_API}/api/1/versions/${lastDeploy.revision}?environment=${environment}`,
+            { headers : HEADERS })
+    const versions = await versionsResponse.json()
+
+    if (versions.err === 1) {
+        throw new Error(versions.message)
+    }
+    return versions.result
+}
+
+const ICON_IMG = "https://user-images.githubusercontent.com/27153/90803304-65a97980-e2cd-11ea-8267-a711fdcc6bc9.png"
+
+exports.getSummary = async ({token, yamlConfig}) => {
+    const { environment, account, project } = yamlConfig
+
+    try {
+        const context = await getApiContext({token, environment})
+        if (context === null) {
+            return {
+
+            }
+        }
+        var status = "unknown"
+        var message = "Rollbar data unavailable"
+        const details = [
+            {
+                message : `Version ${context.version} has ${context.item_stats.new.critical} critical errors.`
+            }
+        ]
+
+        const errors = context.item_stats.new.error
+        if (errors > 0) {
+            status = "warn"
+            message = "New errors have been detected since last deploy"
+        }
+
+        const critical = context.item_stats.new.critical
+        if (critical > 0) {
+            status = "error"
+            message = "New critical errors have been detected since last deploy"
+        }
+
+        if (errors + critical === 0) {
+            status = "ok"
+            message = "No new errors detected since last deploy"
+        }
+
+        // eslint-disable-next-line max-len
+        const summaryLink = `https://rollbar.com/${account}/${project}/versions/${environment}/${context.version}`
+
+        return {
+            status,
+            message,
+            summaryLink,
+            details,
+            context,
+            logo : ICON_IMG
+        }
+    } catch (e) {
+        return {
+            "status"  : "unknown",
+            "message" : `Rollbar API Error: ${e.message}`,
+            logo      : ICON_IMG,
+        }
+    }
+}
+
+
+/***/ }),
 /* 263 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
@@ -5522,7 +6048,414 @@ module.exports = cloneRegExp;
 
 /***/ }),
 /* 270 */,
-/* 271 */,
+/* 271 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+/**
+ * Module dependencies
+ */
+var Hash = __webpack_require__( 834 ).Hash,
+  Node = __webpack_require__( 637 ).Node,
+  Edge = __webpack_require__( 156 ).Edge,
+  gvattrs = __webpack_require__( 202 ),
+  Attributs = gvattrs.Attributs,
+  util = __webpack_require__(669),
+  path = __webpack_require__(622),
+  spawn  = __webpack_require__(129).spawn;
+
+/**
+ * Create a new graph
+ * @constructor
+ * @param {Graph} graph Parent Graph
+ * @param {String} id The graphID
+ * @return {Graph}
+ * @api public
+ */
+var Graph = exports.Graph = function(graph, id) {
+  this.relativeGraph = graph;
+  this.id = id;
+  this.type = 'graph';
+  this.gvPath = '';
+  this.nodes = new Hash();
+  this.edges = new Array();
+  this.clusters = new Hash();
+  if( this.relativeGraph == null ) {
+    this.graphAttributs = new Attributs("G");
+  } else {
+    this.graphAttributs = new Attributs("C");
+  }
+  this.nodesAttributs = new Attributs("N");
+  this.edgesAttributs = new Attributs("E");
+  this.use = 'dot';
+};
+
+/**
+ * Create a new node
+ *
+ * @param {String} id The node ID
+ * @param {Object} attrs Node attributs
+ * @return {Node}
+ * @api public
+ */
+Graph.prototype.addNode = function(id, attrs) {
+  this.nodes.setItem(id, new Node(this, id));
+  if( attrs ) {
+    for( k in attrs ) {
+      this.nodes.items[id].set( k, attrs[k] );
+    }
+  }
+
+  return this.nodes.items[id];
+}
+
+/**
+ * Return a node for a given ID
+ *
+ * @param {String} id The node ID
+ * @return {Node}
+ * @api public
+ */
+Graph.prototype.getNode = function(id) {
+  return this.nodes.items[id];
+}
+
+Graph.prototype.from = function(id) {
+	if( this.nodes.items[id] == undefined ) {
+		this.addNode(id);
+	}
+	return this.nodes.items[id];
+}
+
+/**
+ * Return the number of nodes in the current graph
+ *
+ * @return {Integer}
+ * @api public
+ */
+Graph.prototype.nodeCount = function() {
+  return this.nodes.length;
+}
+
+/**
+ * Create a new edge
+ *
+ * @param {String|Node} nodeOne
+ * @param {String|Node} nodeTwo
+ * @param {Object} attrs Node attributs
+ * @return {Edge}
+ * @api public
+ */
+Graph.prototype.addEdge = function(nodeOne, nodeTwo, attrs) {
+  var _nodeOne = nodeOne;
+  var _nodeTwo = nodeTwo;
+  if( typeof(nodeOne) == 'string' ) {
+    _nodeOne = this.nodes.items[nodeOne];
+    if( _nodeOne == null ) {
+      _nodeOne = this.addNode( nodeOne );
+    }
+  }
+  if( typeof(nodeTwo) == 'string' ) {
+    _nodeTwo = this.nodes.items[nodeTwo];
+    if( _nodeTwo == null ) {
+      _nodeTwo = this.addNode( nodeTwo );
+    }
+  }
+  
+  var edge = new Edge(this, _nodeOne, _nodeTwo);
+  if( attrs ) {
+    for( k in attrs ) {
+      edge.set( k, attrs[k] );
+    }
+  }
+  this.edges.push( edge );
+  
+  return edge;
+}
+
+/**
+ * Return the number of edges in the current graph
+ *
+ * @return {Integer}
+ * @api public
+ */
+Graph.prototype.edgeCount = function() {
+  return this.edges.length;
+};
+
+/**
+ * Create a new subgraph
+ *
+ * @param {String} id The subgraph ID
+ * @return {Graph}
+ * @api public
+ */
+Graph.prototype.addCluster = function(id) {
+  var cluster = new Graph(this, id);
+  cluster.type = this.type;
+  this.clusters.setItem(id, cluster);
+  return cluster;
+}
+
+/**
+ * Return a subgraph for a given ID
+ *
+ * @param {String} id The subgraph ID
+ * @return {Graph}
+ * @api public
+ */
+Graph.prototype.getCluster = function(id) {
+  return this.clusters.items[id];
+}
+
+/**
+ * Return the number of subgraphs in the current graph
+ *
+ * @return {Integer}
+ * @api public
+ */
+Graph.prototype.clusterCount = function() {
+  return this.clusters.length;
+}
+
+/**
+ * Set a graph attribut
+ *
+ * @param {String} name The attribut name
+ * @param {Void} value The attribut value
+ * @api public
+ */
+Graph.prototype.set = function(name, value) {
+  this.graphAttributs.set(name, value);
+}
+
+/**
+ * Get a graph attribut
+ *
+ * @param {String} name The attribut name
+ * @return {Void}
+ * @api public
+ */
+Graph.prototype.get = function(name) {
+  return this.graphAttributs.get(name);
+}
+
+/**
+ * Set a global node attribut
+ *
+ * @param {String} name The attribut name
+ * @param {Void} value The attribut value
+ * @api public
+ */
+Graph.prototype.setNodeAttribut = function(name, value) {
+  this.nodesAttributs.set(name, value);
+}
+
+/**
+ * Get a global node attribut
+ *
+ * @param {String} name The attribut name
+ * @return {Void}
+ * @api public
+ */
+Graph.prototype.getNodeAttribut = function(name) {
+  return this.nodesAttributs.get(name);
+}
+
+/**
+ * Set a global edge attribut
+ *
+ * @param {String} name The attribut name
+ * @param {Void} value The attribut value
+ * @api public
+ */
+Graph.prototype.setEdgeAttribut = function(name, value) {
+  this.edgesAttributs.set(name, value);
+}
+
+/**
+ * Get a global edge attribut
+ *
+ * @param {String} name The attribut name
+ * @return {Void}
+ * @api public
+ */
+Graph.prototype.getEdgeAttribut = function(name) {
+  return this.edgesAttributs.get(name);
+}
+
+/**
+ * Generate the GraphViz script
+ *
+ * @return {String}
+ * @api public
+ */
+Graph.prototype.to_dot = function() {
+  var dotScript = '';
+  if( this.relativeGraph == null ) {
+    dotScript = this.type + ' ' + this.id + ' {\n'
+  } else {
+    dotScript = 'subgraph ' + this.id + ' {\n'
+  }
+  
+  // Graph attributs
+  if( this.graphAttributs.length() > 0 ) {
+    dotScript = dotScript + "  graph" + this.graphAttributs.to_dot() + ";\n";
+  }
+  
+  // Nodes attributs
+  if( this.nodesAttributs.length() > 0 ) {
+    dotScript = dotScript + "  node" + this.nodesAttributs.to_dot() + ";\n";
+  }
+  
+  // Edges attributs
+  if( this.edgesAttributs.length() > 0 ) {
+    dotScript = dotScript + "  edge" + this.edgesAttributs.to_dot() + ";\n";
+  }
+  
+  // Each clusters
+  for( var id in this.clusters.items ) {
+    if (this.clusters.items.hasOwnProperty(id)) {
+      dotScript = dotScript + this.clusters.items[id].to_dot() + '\n';
+    }
+  }
+  
+  // Each nodes
+  for( var id in this.nodes.items ) {
+    if (this.nodes.items.hasOwnProperty(id)) {
+      dotScript = dotScript + '  ' + this.nodes.items[id].to_dot() + ';\n'
+    }
+  }
+  
+  // Each edges
+  for( var i in this.edges ) {
+    if (this.edges.hasOwnProperty(i)) {
+      dotScript = dotScript + '  ' + this.edges[i].to_dot() + ';\n'
+    }
+  }
+  
+  dotScript = dotScript + '}\n'
+  
+  return dotScript;
+}
+
+/**
+ * Generate an output in file or memory
+ *
+ * @param {String|Object} type The output file type (png, jpeg, ps, ...) or options
+ * @param {String|Function} name_or_callback The output file name or callback
+ * @param {Function} errback Error callback
+ * @api public
+ *
+ * Options :
+ *   - type : output file type (png, jpeg, ps, ...)
+ *   - use : Graphviz command to use (dot, neato, ...)
+ *   - path : GraphViz path
+ *   - G : 
+ *   - N :
+ *   - E :
+ */
+Graph.prototype.render = function(type_or_options, name_or_callback, errback) {
+	var parameters = [];
+	
+	// Get output type
+	var type = type_or_options;
+	if( typeof(type_or_options) == 'object' ) {
+		type = type_or_options.type;
+
+		// Get use
+		if( type_or_options.use != undefined ) { this.use = type_or_options.use; }
+		
+		// Get path
+		if( type_or_options.path != undefined ) { this.gvPath = type_or_options.path; }
+		
+		// Get extra Graph Options
+		if( type_or_options.G != undefined ) {
+			for( attr in type_or_options.G ) {
+				if( gvattrs.isValid( attr, "G" ) == false ) {
+					util.debug( "Warning : Invalid attribut `"+attr+"' for a graph" );
+				}
+	      parameters.push( "-G"+attr+"="+type_or_options.G[attr] )
+	    }
+		}
+		// Get extra Node Options
+		if( type_or_options.N != undefined ) {
+			for( attr in type_or_options.N ) {
+				if( gvattrs.isValid( attr, "N" ) == false ) {
+					util.debug( "Warning : Invalid attribut `"+attr+"' for a node" );
+				}
+	      parameters.push( "-N"+attr+"="+type_or_options.N[attr] )
+	    }			
+		}
+		// Get extra Edge Options
+		if( type_or_options.E != undefined ) {
+			for( attr in type_or_options.E ) {
+				if( gvattrs.isValid( attr, "E" ) == false ) {
+					util.debug( "Warning : Invalid attribut `"+attr+"' for an edge" );
+				}
+	      parameters.push( "-E"+attr+"="+type_or_options.E[attr] )
+	    }			
+		}
+	}
+	parameters.push( '-T' + type );
+	
+  var dotScript = this.to_dot();
+  
+  var cmd = this.use;
+  if( this.gvPath != '' ) {
+    cmd = path.join( this.gvPath, this.use )
+  }
+  
+  var rendered = null;
+  var out = ''
+  var err = ''
+  var outcallback = function(data) { 
+    if( rendered == null ) {
+      rendered = data; 
+    } else {
+      __b = new Buffer( rendered.length + data.length )
+      rendered.copy(__b, 0, 0)
+      data.copy(__b, rendered.length, 0)
+      rendered = __b
+    }
+  };
+  
+  if( typeof(name_or_callback) == 'string' ) {
+    parameters.push( '-o' + name_or_callback )
+    outcallback = function(data) { out += data; }
+  }
+  
+  graphviz = spawn(cmd, parameters);
+  graphviz.stdout.on('data', outcallback);
+  graphviz.stderr.on('data', function(data) {
+    err += data;
+  });
+  graphviz.on('exit', function(code) {
+    if(code !== 0) {
+      if(errback) { errback(code, out, err) }
+    } else {
+      if( typeof(name_or_callback) == 'function' ) name_or_callback(rendered);
+    }
+  });
+  graphviz.stdin.write(this.to_dot());
+  graphviz.stdin.end();
+}
+// Compatibility
+Graph.prototype.output = function(type, name_or_callback, errback) {
+  this.render(type, name_or_callback, errback);
+}
+
+/**
+ * Set the GraphViz path
+ *
+ * @param {String} path The GraphViz path
+ * @api public
+ */
+Graph.prototype.setGraphVizPath = function(path) {
+  this.gvPath = path;
+}
+
+
+/***/ }),
 /* 272 */
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
@@ -5745,7 +6678,193 @@ module.exports = baseToString;
 /* 284 */,
 /* 285 */,
 /* 286 */,
-/* 287 */,
+/* 287 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+Object.defineProperty(exports, "__esModule", { value: true });
+/*!
+ * https://github.com/Starcounter-Jack/JSON-Patch
+ * (c) 2017 Joachim Wester
+ * MIT license
+ */
+var helpers_js_1 = __webpack_require__(41);
+var core_js_1 = __webpack_require__(383);
+var beforeDict = new WeakMap();
+var Mirror = /** @class */ (function () {
+    function Mirror(obj) {
+        this.observers = new Map();
+        this.obj = obj;
+    }
+    return Mirror;
+}());
+var ObserverInfo = /** @class */ (function () {
+    function ObserverInfo(callback, observer) {
+        this.callback = callback;
+        this.observer = observer;
+    }
+    return ObserverInfo;
+}());
+function getMirror(obj) {
+    return beforeDict.get(obj);
+}
+function getObserverFromMirror(mirror, callback) {
+    return mirror.observers.get(callback);
+}
+function removeObserverFromMirror(mirror, observer) {
+    mirror.observers.delete(observer.callback);
+}
+/**
+ * Detach an observer from an object
+ */
+function unobserve(root, observer) {
+    observer.unobserve();
+}
+exports.unobserve = unobserve;
+/**
+ * Observes changes made to an object, which can then be retrieved using generate
+ */
+function observe(obj, callback) {
+    var patches = [];
+    var observer;
+    var mirror = getMirror(obj);
+    if (!mirror) {
+        mirror = new Mirror(obj);
+        beforeDict.set(obj, mirror);
+    }
+    else {
+        var observerInfo = getObserverFromMirror(mirror, callback);
+        observer = observerInfo && observerInfo.observer;
+    }
+    if (observer) {
+        return observer;
+    }
+    observer = {};
+    mirror.value = helpers_js_1._deepClone(obj);
+    if (callback) {
+        observer.callback = callback;
+        observer.next = null;
+        var dirtyCheck = function () {
+            generate(observer);
+        };
+        var fastCheck = function () {
+            clearTimeout(observer.next);
+            observer.next = setTimeout(dirtyCheck);
+        };
+        if (typeof window !== 'undefined') { //not Node
+            window.addEventListener('mouseup', fastCheck);
+            window.addEventListener('keyup', fastCheck);
+            window.addEventListener('mousedown', fastCheck);
+            window.addEventListener('keydown', fastCheck);
+            window.addEventListener('change', fastCheck);
+        }
+    }
+    observer.patches = patches;
+    observer.object = obj;
+    observer.unobserve = function () {
+        generate(observer);
+        clearTimeout(observer.next);
+        removeObserverFromMirror(mirror, observer);
+        if (typeof window !== 'undefined') {
+            window.removeEventListener('mouseup', fastCheck);
+            window.removeEventListener('keyup', fastCheck);
+            window.removeEventListener('mousedown', fastCheck);
+            window.removeEventListener('keydown', fastCheck);
+            window.removeEventListener('change', fastCheck);
+        }
+    };
+    mirror.observers.set(callback, new ObserverInfo(callback, observer));
+    return observer;
+}
+exports.observe = observe;
+/**
+ * Generate an array of patches from an observer
+ */
+function generate(observer, invertible) {
+    if (invertible === void 0) { invertible = false; }
+    var mirror = beforeDict.get(observer.object);
+    _generate(mirror.value, observer.object, observer.patches, "", invertible);
+    if (observer.patches.length) {
+        core_js_1.applyPatch(mirror.value, observer.patches);
+    }
+    var temp = observer.patches;
+    if (temp.length > 0) {
+        observer.patches = [];
+        if (observer.callback) {
+            observer.callback(temp);
+        }
+    }
+    return temp;
+}
+exports.generate = generate;
+// Dirty check if obj is different from mirror, generate patches and update mirror
+function _generate(mirror, obj, patches, path, invertible) {
+    if (obj === mirror) {
+        return;
+    }
+    if (typeof obj.toJSON === "function") {
+        obj = obj.toJSON();
+    }
+    var newKeys = helpers_js_1._objectKeys(obj);
+    var oldKeys = helpers_js_1._objectKeys(mirror);
+    var changed = false;
+    var deleted = false;
+    //if ever "move" operation is implemented here, make sure this test runs OK: "should not generate the same patch twice (move)"
+    for (var t = oldKeys.length - 1; t >= 0; t--) {
+        var key = oldKeys[t];
+        var oldVal = mirror[key];
+        if (helpers_js_1.hasOwnProperty(obj, key) && !(obj[key] === undefined && oldVal !== undefined && Array.isArray(obj) === false)) {
+            var newVal = obj[key];
+            if (typeof oldVal == "object" && oldVal != null && typeof newVal == "object" && newVal != null) {
+                _generate(oldVal, newVal, patches, path + "/" + helpers_js_1.escapePathComponent(key), invertible);
+            }
+            else {
+                if (oldVal !== newVal) {
+                    changed = true;
+                    if (invertible) {
+                        patches.push({ op: "test", path: path + "/" + helpers_js_1.escapePathComponent(key), value: helpers_js_1._deepClone(oldVal) });
+                    }
+                    patches.push({ op: "replace", path: path + "/" + helpers_js_1.escapePathComponent(key), value: helpers_js_1._deepClone(newVal) });
+                }
+            }
+        }
+        else if (Array.isArray(mirror) === Array.isArray(obj)) {
+            if (invertible) {
+                patches.push({ op: "test", path: path + "/" + helpers_js_1.escapePathComponent(key), value: helpers_js_1._deepClone(oldVal) });
+            }
+            patches.push({ op: "remove", path: path + "/" + helpers_js_1.escapePathComponent(key) });
+            deleted = true; // property has been deleted
+        }
+        else {
+            if (invertible) {
+                patches.push({ op: "test", path: path, value: mirror });
+            }
+            patches.push({ op: "replace", path: path, value: obj });
+            changed = true;
+        }
+    }
+    if (!deleted && newKeys.length == oldKeys.length) {
+        return;
+    }
+    for (var t = 0; t < newKeys.length; t++) {
+        var key = newKeys[t];
+        if (!helpers_js_1.hasOwnProperty(mirror, key) && obj[key] !== undefined) {
+            patches.push({ op: "add", path: path + "/" + helpers_js_1.escapePathComponent(key), value: helpers_js_1._deepClone(obj[key]) });
+        }
+    }
+}
+/**
+ * Create an array of patches from the differences in two objects
+ */
+function compare(tree1, tree2, invertible) {
+    if (invertible === void 0) { invertible = false; }
+    var patches = [];
+    _generate(tree1, tree2, patches, '', invertible);
+    return patches;
+}
+exports.compare = compare;
+
+
+/***/ }),
 /* 288 */
 /***/ (function(module) {
 
@@ -6330,457 +7449,8 @@ global.FormData = module.exports = __webpack_require__(928)
 /* 300 */,
 /* 301 */,
 /* 302 */,
-/* 303 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-
-exports.__esModule = true;
-exports.default = void 0;
-
-var jsonPatch = _interopRequireWildcard(__webpack_require__(733));
-
-var _deepExtend = _interopRequireDefault(__webpack_require__(203));
-
-var _cloneDeep = _interopRequireDefault(__webpack_require__(769));
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return null; var cache = new WeakMap(); _getRequireWildcardCache = function () { return cache; }; return cache; }
-
-function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
-
-function ownKeys(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); keys.push.apply(keys, symbols); } return keys; }
-
-function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i] != null ? arguments[i] : {}; if (i % 2) { ownKeys(Object(source), true).forEach(function (key) { _defineProperty(target, key, source[key]); }); } else if (Object.getOwnPropertyDescriptors) { Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)); } else { ownKeys(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } } return target; }
-
-function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
-
-var _default = {
-  add,
-  replace,
-  remove,
-  merge,
-  mergeDeep,
-  context,
-  getIn,
-  applyPatch,
-  parentPathMatch,
-  flatten,
-  fullyNormalizeArray,
-  normalizeArray,
-  isPromise,
-  forEachNew,
-  forEachNewPrimitive,
-  isJsonPatch,
-  isContextPatch,
-  isPatch,
-  isMutation,
-  isAdditiveMutation,
-  isGenerator,
-  isFunction,
-  isObject,
-  isError
-};
-exports.default = _default;
-
-function applyPatch(obj, patch, opts) {
-  opts = opts || {};
-  patch = _objectSpread(_objectSpread({}, patch), {}, {
-    path: patch.path && normalizeJSONPath(patch.path)
-  });
-
-  if (patch.op === 'merge') {
-    const newValue = getInByJsonPath(obj, patch.path);
-    Object.assign(newValue, patch.value);
-    jsonPatch.applyPatch(obj, [replace(patch.path, newValue)]);
-  } else if (patch.op === 'mergeDeep') {
-    const currentValue = getInByJsonPath(obj, patch.path); // Iterate the properties of the patch
-    // eslint-disable-next-line no-restricted-syntax, guard-for-in
-
-    for (const prop in patch.value) {
-      const propVal = patch.value[prop];
-      const isArray = Array.isArray(propVal);
-
-      if (isArray) {
-        // deepExtend doesn't merge arrays, so we will do it manually
-        const existing = currentValue[prop] || [];
-        currentValue[prop] = existing.concat(propVal);
-      } else if (isObject(propVal) && !isArray) {
-        // If it's an object, iterate it's keys and merge
-        // if there are conflicting keys, merge deep, otherwise shallow merge
-        let currentObj = _objectSpread({}, currentValue[prop]); // eslint-disable-next-line no-restricted-syntax
-
-
-        for (const key in propVal) {
-          if (Object.prototype.hasOwnProperty.call(currentObj, key)) {
-            // if there is a single conflicting key, just deepExtend the entire value
-            // and break from the loop (since all future keys are also merged)
-            // We do this because we can't deepExtend two primitives
-            // (currentObj[key] & propVal[key] may be primitives).
-            //
-            // we also deeply assign here, since we aren't in control of
-            // how deepExtend affects existing nested objects
-            currentObj = (0, _deepExtend.default)((0, _cloneDeep.default)(currentObj), propVal);
-            break;
-          } else {
-            Object.assign(currentObj, {
-              [key]: propVal[key]
-            });
-          }
-        }
-
-        currentValue[prop] = currentObj;
-      } else {
-        // It's a primitive, just replace existing
-        currentValue[prop] = propVal;
-      }
-    }
-  } else if (patch.op === 'add' && patch.path === '' && isObject(patch.value)) {
-    // { op: 'add', path: '', value: { a: 1, b: 2 }}
-    // has no effect: json patch refuses to do anything.
-    // so let's break that patch down into a set of patches,
-    // one for each key in the intended root value.
-    const patches = Object.keys(patch.value).reduce((arr, key) => {
-      arr.push({
-        op: 'add',
-        path: `/${normalizeJSONPath(key)}`,
-        value: patch.value[key]
-      });
-      return arr;
-    }, []);
-    jsonPatch.applyPatch(obj, patches);
-  } else if (patch.op === 'replace' && patch.path === '') {
-    let {
-      value
-    } = patch;
-
-    if (opts.allowMetaPatches && patch.meta && isAdditiveMutation(patch) && (Array.isArray(patch.value) || isObject(patch.value))) {
-      value = _objectSpread(_objectSpread({}, value), patch.meta);
-    }
-
-    obj = value;
-  } else {
-    jsonPatch.applyPatch(obj, [patch]); // Attach metadata to the resulting value.
-
-    if (opts.allowMetaPatches && patch.meta && isAdditiveMutation(patch) && (Array.isArray(patch.value) || isObject(patch.value))) {
-      const currentValue = getInByJsonPath(obj, patch.path);
-
-      const newValue = _objectSpread(_objectSpread({}, currentValue), patch.meta);
-
-      jsonPatch.applyPatch(obj, [replace(patch.path, newValue)]);
-    }
-  }
-
-  return obj;
-}
-
-function normalizeJSONPath(path) {
-  if (Array.isArray(path)) {
-    if (path.length < 1) {
-      return '';
-    }
-
-    return `/${path.map(item => {
-      // eslint-disable-line prefer-template
-      return (item + '').replace(/~/g, '~0').replace(/\//g, '~1'); // eslint-disable-line prefer-template
-    }).join('/')}`;
-  }
-
-  return path;
-} // =========================
-// JSON-Patch Wrappers
-// =========================
-
-
-function add(path, value) {
-  return {
-    op: 'add',
-    path,
-    value
-  };
-} // function _get(path) {
-//   return { op: '_get', path };
-// }
-
-
-function replace(path, value, meta) {
-  return {
-    op: 'replace',
-    path,
-    value,
-    meta
-  };
-}
-
-function remove(path) {
-  return {
-    op: 'remove',
-    path
-  };
-} // Custom wrappers
-
-
-function merge(path, value) {
-  return {
-    type: 'mutation',
-    op: 'merge',
-    path,
-    value
-  };
-} // Custom wrappers
-
-
-function mergeDeep(path, value) {
-  return {
-    type: 'mutation',
-    op: 'mergeDeep',
-    path,
-    value
-  };
-}
-
-function context(path, value) {
-  return {
-    type: 'context',
-    path,
-    value
-  };
-} // =========================
-// Iterators
-// =========================
-
-
-function forEachNew(mutations, fn) {
-  try {
-    return forEachNewPatch(mutations, forEach, fn);
-  } catch (e) {
-    return e;
-  }
-}
-
-function forEachNewPrimitive(mutations, fn) {
-  try {
-    return forEachNewPatch(mutations, forEachPrimitive, fn);
-  } catch (e) {
-    return e;
-  }
-}
-
-function forEachNewPatch(mutations, fn, callback) {
-  const res = mutations.filter(isAdditiveMutation).map(mutation => {
-    return fn(mutation.value, callback, mutation.path);
-  }) || [];
-  const flat = flatten(res);
-  const clean = cleanArray(flat);
-  return clean;
-}
-
-function forEachPrimitive(obj, fn, basePath) {
-  basePath = basePath || [];
-
-  if (Array.isArray(obj)) {
-    return obj.map((val, key) => {
-      return forEachPrimitive(val, fn, basePath.concat(key));
-    });
-  }
-
-  if (isObject(obj)) {
-    return Object.keys(obj).map(key => {
-      return forEachPrimitive(obj[key], fn, basePath.concat(key));
-    });
-  }
-
-  return fn(obj, basePath[basePath.length - 1], basePath);
-}
-
-function forEach(obj, fn, basePath) {
-  basePath = basePath || [];
-  let results = [];
-
-  if (basePath.length > 0) {
-    const newResults = fn(obj, basePath[basePath.length - 1], basePath);
-
-    if (newResults) {
-      results = results.concat(newResults);
-    }
-  }
-
-  if (Array.isArray(obj)) {
-    const arrayResults = obj.map((val, key) => {
-      return forEach(val, fn, basePath.concat(key));
-    });
-
-    if (arrayResults) {
-      results = results.concat(arrayResults);
-    }
-  } else if (isObject(obj)) {
-    const moreResults = Object.keys(obj).map(key => {
-      return forEach(obj[key], fn, basePath.concat(key));
-    });
-
-    if (moreResults) {
-      results = results.concat(moreResults);
-    }
-  }
-
-  results = flatten(results);
-  return results;
-} // =========================
-// Paths
-// =========================
-
-
-function parentPathMatch(path, arr) {
-  if (!Array.isArray(arr)) {
-    return false;
-  }
-
-  for (let i = 0, len = arr.length; i < len; i += 1) {
-    if (arr[i] !== path[i]) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function getIn(obj, path) {
-  return path.reduce((val, token) => {
-    if (typeof token !== 'undefined' && val) {
-      return val[token];
-    }
-
-    return val;
-  }, obj);
-} // =========================
-// Array
-// =========================
-
-
-function fullyNormalizeArray(arr) {
-  return cleanArray(flatten(normalizeArray(arr)));
-}
-
-function normalizeArray(arr) {
-  return Array.isArray(arr) ? arr : [arr];
-}
-
-function flatten(arr) {
-  return [].concat(...arr.map(val => {
-    return Array.isArray(val) ? flatten(val) : val;
-  }));
-}
-
-function cleanArray(arr) {
-  return arr.filter(elm => typeof elm !== 'undefined');
-} // =========================
-// Is-Thing.
-// =========================
-
-
-function isObject(val) {
-  return val && typeof val === 'object';
-}
-
-function isPromise(val) {
-  return isObject(val) && isFunction(val.then);
-}
-
-function isFunction(val) {
-  return val && typeof val === 'function';
-}
-
-function isError(patch) {
-  return patch instanceof Error;
-}
-
-function isJsonPatch(patch) {
-  if (isPatch(patch)) {
-    const {
-      op
-    } = patch;
-    return op === 'add' || op === 'remove' || op === 'replace';
-  }
-
-  return false;
-}
-
-function isGenerator(thing) {
-  return Object.prototype.toString.call(thing) === '[object GeneratorFunction]';
-}
-
-function isMutation(patch) {
-  return isJsonPatch(patch) || isPatch(patch) && patch.type === 'mutation';
-}
-
-function isAdditiveMutation(patch) {
-  return isMutation(patch) && (patch.op === 'add' || patch.op === 'replace' || patch.op === 'merge' || patch.op === 'mergeDeep');
-}
-
-function isContextPatch(patch) {
-  return isPatch(patch) && patch.type === 'context';
-}
-
-function isPatch(patch) {
-  return patch && typeof patch === 'object';
-}
-
-function getInByJsonPath(obj, jsonPath) {
-  try {
-    return jsonPatch.getValueByPointer(obj, jsonPath);
-  } catch (e) {
-    console.error(e); // eslint-disable-line no-console
-
-    return {};
-  }
-}
-
-/***/ }),
-/* 304 */
-/***/ (function(module) {
-
-/** Used to detect hot functions by number of calls within a span of milliseconds. */
-var HOT_COUNT = 800,
-    HOT_SPAN = 16;
-
-/* Built-in method references for those with the same name as other `lodash` methods. */
-var nativeNow = Date.now;
-
-/**
- * Creates a function that'll short out and invoke `identity` instead
- * of `func` when it's called `HOT_COUNT` or more times in `HOT_SPAN`
- * milliseconds.
- *
- * @private
- * @param {Function} func The function to restrict.
- * @returns {Function} Returns the new shortable function.
- */
-function shortOut(func) {
-  var count = 0,
-      lastCalled = 0;
-
-  return function() {
-    var stamp = nativeNow(),
-        remaining = HOT_SPAN - (stamp - lastCalled);
-
-    lastCalled = stamp;
-    if (remaining > 0) {
-      if (++count >= HOT_COUNT) {
-        return arguments[0];
-      }
-    } else {
-      count = 0;
-    }
-    return func.apply(undefined, arguments);
-  };
-}
-
-module.exports = shortOut;
-
-
-/***/ }),
+/* 303 */,
+/* 304 */,
 /* 305 */,
 /* 306 */,
 /* 307 */,
@@ -7286,7 +7956,7 @@ module.exports = new Type('tag:yaml.org,2002:js/function', {
 exports.__esModule = true;
 exports.default = void 0;
 
-var _ = _interopRequireDefault(__webpack_require__(303));
+var _ = _interopRequireDefault(__webpack_require__(192));
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -7436,69 +8106,7 @@ module.exports = hasIn;
 
 
 /***/ }),
-/* 361 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-const fetch = __webpack_require__(454)
-
-const PD_API = 'https://api.pagerduty.com'
-
-const getApiContext = async ({token, service}) => {
-    const HEADERS = {
-        "Authorization" : `Token token=${token}`,
-        "Accept"        : "application/json"
-    }
-    const serviceResponse = await fetch(`${PD_API}/services/${service}`, { headers : HEADERS })
-    if (serviceResponse.status !== 200) {
-        throw new Error(`PagerDuty API error fetching service '${service}' ${serviceResponse.status}`)
-    }
-
-    const serviceJson = await serviceResponse.json()
-    const escalationPolicyId = serviceJson.service.escalation_policy.id
-
-    const onCallResponse = await fetch(`${PD_API}/oncalls?include[]=&escalation_policy_ids[]=${escalationPolicyId}`,
-        { headers : HEADERS })
-    if (onCallResponse.status !== 200) {
-        throw new Error(`PagerDuty API error fetching oncalls ${serviceResponse.status}`)
-    }
-
-    const oncallsJson = await onCallResponse.json()
-
-    return {
-        service : serviceJson.service,
-        oncalls : oncallsJson.oncalls
-    }
-}
-
-const ICON_IMG = "https://user-images.githubusercontent.com/27153/90803915-4fe88400-e2ce-11ea-803f-47b9c244799d.png"
-
-exports.getSummary = async ({token, yamlConfig}) => {
-    const { service } = yamlConfig
-
-    try {
-        const context = await getApiContext({token, service})
-        var onCallNames = context.oncalls.map(o => o.user.summary)
-        var summaryLink = context.service.html_url
-        var message = `On-call for *${context.service.name}*: ${onCallNames}`
-        return {
-            status : "unknown",
-            message,
-            summaryLink,
-            logo   : ICON_IMG
-        }
-    } catch (e) {
-        return {
-            status      : "unknown",
-            message     : `PagerDuty API Error: ${e.message}`,
-            summaryLink : "http://www.pagerduty.com",
-            logo        : ICON_IMG
-        }
-    }
-
-}
-
-
-/***/ }),
+/* 361 */,
 /* 362 */,
 /* 363 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
@@ -7764,7 +8372,446 @@ module.exports = defineProperty;
 
 
 /***/ }),
-/* 383 */,
+/* 383 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var helpers_js_1 = __webpack_require__(41);
+exports.JsonPatchError = helpers_js_1.PatchError;
+exports.deepClone = helpers_js_1._deepClone;
+/* We use a Javascript hash to store each
+ function. Each hash entry (property) uses
+ the operation identifiers specified in rfc6902.
+ In this way, we can map each patch operation
+ to its dedicated function in efficient way.
+ */
+/* The operations applicable to an object */
+var objOps = {
+    add: function (obj, key, document) {
+        obj[key] = this.value;
+        return { newDocument: document };
+    },
+    remove: function (obj, key, document) {
+        var removed = obj[key];
+        delete obj[key];
+        return { newDocument: document, removed: removed };
+    },
+    replace: function (obj, key, document) {
+        var removed = obj[key];
+        obj[key] = this.value;
+        return { newDocument: document, removed: removed };
+    },
+    move: function (obj, key, document) {
+        /* in case move target overwrites an existing value,
+        return the removed value, this can be taxing performance-wise,
+        and is potentially unneeded */
+        var removed = getValueByPointer(document, this.path);
+        if (removed) {
+            removed = helpers_js_1._deepClone(removed);
+        }
+        var originalValue = applyOperation(document, { op: "remove", path: this.from }).removed;
+        applyOperation(document, { op: "add", path: this.path, value: originalValue });
+        return { newDocument: document, removed: removed };
+    },
+    copy: function (obj, key, document) {
+        var valueToCopy = getValueByPointer(document, this.from);
+        // enforce copy by value so further operations don't affect source (see issue #177)
+        applyOperation(document, { op: "add", path: this.path, value: helpers_js_1._deepClone(valueToCopy) });
+        return { newDocument: document };
+    },
+    test: function (obj, key, document) {
+        return { newDocument: document, test: _areEquals(obj[key], this.value) };
+    },
+    _get: function (obj, key, document) {
+        this.value = obj[key];
+        return { newDocument: document };
+    }
+};
+/* The operations applicable to an array. Many are the same as for the object */
+var arrOps = {
+    add: function (arr, i, document) {
+        if (helpers_js_1.isInteger(i)) {
+            arr.splice(i, 0, this.value);
+        }
+        else { // array props
+            arr[i] = this.value;
+        }
+        // this may be needed when using '-' in an array
+        return { newDocument: document, index: i };
+    },
+    remove: function (arr, i, document) {
+        var removedList = arr.splice(i, 1);
+        return { newDocument: document, removed: removedList[0] };
+    },
+    replace: function (arr, i, document) {
+        var removed = arr[i];
+        arr[i] = this.value;
+        return { newDocument: document, removed: removed };
+    },
+    move: objOps.move,
+    copy: objOps.copy,
+    test: objOps.test,
+    _get: objOps._get
+};
+/**
+ * Retrieves a value from a JSON document by a JSON pointer.
+ * Returns the value.
+ *
+ * @param document The document to get the value from
+ * @param pointer an escaped JSON pointer
+ * @return The retrieved value
+ */
+function getValueByPointer(document, pointer) {
+    if (pointer == '') {
+        return document;
+    }
+    var getOriginalDestination = { op: "_get", path: pointer };
+    applyOperation(document, getOriginalDestination);
+    return getOriginalDestination.value;
+}
+exports.getValueByPointer = getValueByPointer;
+/**
+ * Apply a single JSON Patch Operation on a JSON document.
+ * Returns the {newDocument, result} of the operation.
+ * It modifies the `document` and `operation` objects - it gets the values by reference.
+ * If you would like to avoid touching your values, clone them:
+ * `jsonpatch.applyOperation(document, jsonpatch._deepClone(operation))`.
+ *
+ * @param document The document to patch
+ * @param operation The operation to apply
+ * @param validateOperation `false` is without validation, `true` to use default jsonpatch's validation, or you can pass a `validateOperation` callback to be used for validation.
+ * @param mutateDocument Whether to mutate the original document or clone it before applying
+ * @param banPrototypeModifications Whether to ban modifications to `__proto__`, defaults to `true`.
+ * @return `{newDocument, result}` after the operation
+ */
+function applyOperation(document, operation, validateOperation, mutateDocument, banPrototypeModifications, index) {
+    if (validateOperation === void 0) { validateOperation = false; }
+    if (mutateDocument === void 0) { mutateDocument = true; }
+    if (banPrototypeModifications === void 0) { banPrototypeModifications = true; }
+    if (index === void 0) { index = 0; }
+    if (validateOperation) {
+        if (typeof validateOperation == 'function') {
+            validateOperation(operation, 0, document, operation.path);
+        }
+        else {
+            validator(operation, 0);
+        }
+    }
+    /* ROOT OPERATIONS */
+    if (operation.path === "") {
+        var returnValue = { newDocument: document };
+        if (operation.op === 'add') {
+            returnValue.newDocument = operation.value;
+            return returnValue;
+        }
+        else if (operation.op === 'replace') {
+            returnValue.newDocument = operation.value;
+            returnValue.removed = document; //document we removed
+            return returnValue;
+        }
+        else if (operation.op === 'move' || operation.op === 'copy') { // it's a move or copy to root
+            returnValue.newDocument = getValueByPointer(document, operation.from); // get the value by json-pointer in `from` field
+            if (operation.op === 'move') { // report removed item
+                returnValue.removed = document;
+            }
+            return returnValue;
+        }
+        else if (operation.op === 'test') {
+            returnValue.test = _areEquals(document, operation.value);
+            if (returnValue.test === false) {
+                throw new exports.JsonPatchError("Test operation failed", 'TEST_OPERATION_FAILED', index, operation, document);
+            }
+            returnValue.newDocument = document;
+            return returnValue;
+        }
+        else if (operation.op === 'remove') { // a remove on root
+            returnValue.removed = document;
+            returnValue.newDocument = null;
+            return returnValue;
+        }
+        else if (operation.op === '_get') {
+            operation.value = document;
+            return returnValue;
+        }
+        else { /* bad operation */
+            if (validateOperation) {
+                throw new exports.JsonPatchError('Operation `op` property is not one of operations defined in RFC-6902', 'OPERATION_OP_INVALID', index, operation, document);
+            }
+            else {
+                return returnValue;
+            }
+        }
+    } /* END ROOT OPERATIONS */
+    else {
+        if (!mutateDocument) {
+            document = helpers_js_1._deepClone(document);
+        }
+        var path = operation.path || "";
+        var keys = path.split('/');
+        var obj = document;
+        var t = 1; //skip empty element - http://jsperf.com/to-shift-or-not-to-shift
+        var len = keys.length;
+        var existingPathFragment = undefined;
+        var key = void 0;
+        var validateFunction = void 0;
+        if (typeof validateOperation == 'function') {
+            validateFunction = validateOperation;
+        }
+        else {
+            validateFunction = validator;
+        }
+        while (true) {
+            key = keys[t];
+            if (banPrototypeModifications && key == '__proto__') {
+                throw new TypeError('JSON-Patch: modifying `__proto__` prop is banned for security reasons, if this was on purpose, please set `banPrototypeModifications` flag false and pass it to this function. More info in fast-json-patch README');
+            }
+            if (validateOperation) {
+                if (existingPathFragment === undefined) {
+                    if (obj[key] === undefined) {
+                        existingPathFragment = keys.slice(0, t).join('/');
+                    }
+                    else if (t == len - 1) {
+                        existingPathFragment = operation.path;
+                    }
+                    if (existingPathFragment !== undefined) {
+                        validateFunction(operation, 0, document, existingPathFragment);
+                    }
+                }
+            }
+            t++;
+            if (Array.isArray(obj)) {
+                if (key === '-') {
+                    key = obj.length;
+                }
+                else {
+                    if (validateOperation && !helpers_js_1.isInteger(key)) {
+                        throw new exports.JsonPatchError("Expected an unsigned base-10 integer value, making the new referenced value the array element with the zero-based index", "OPERATION_PATH_ILLEGAL_ARRAY_INDEX", index, operation, document);
+                    } // only parse key when it's an integer for `arr.prop` to work
+                    else if (helpers_js_1.isInteger(key)) {
+                        key = ~~key;
+                    }
+                }
+                if (t >= len) {
+                    if (validateOperation && operation.op === "add" && key > obj.length) {
+                        throw new exports.JsonPatchError("The specified index MUST NOT be greater than the number of elements in the array", "OPERATION_VALUE_OUT_OF_BOUNDS", index, operation, document);
+                    }
+                    var returnValue = arrOps[operation.op].call(operation, obj, key, document); // Apply patch
+                    if (returnValue.test === false) {
+                        throw new exports.JsonPatchError("Test operation failed", 'TEST_OPERATION_FAILED', index, operation, document);
+                    }
+                    return returnValue;
+                }
+            }
+            else {
+                if (key && key.indexOf('~') != -1) {
+                    key = helpers_js_1.unescapePathComponent(key);
+                }
+                if (t >= len) {
+                    var returnValue = objOps[operation.op].call(operation, obj, key, document); // Apply patch
+                    if (returnValue.test === false) {
+                        throw new exports.JsonPatchError("Test operation failed", 'TEST_OPERATION_FAILED', index, operation, document);
+                    }
+                    return returnValue;
+                }
+            }
+            obj = obj[key];
+        }
+    }
+}
+exports.applyOperation = applyOperation;
+/**
+ * Apply a full JSON Patch array on a JSON document.
+ * Returns the {newDocument, result} of the patch.
+ * It modifies the `document` object and `patch` - it gets the values by reference.
+ * If you would like to avoid touching your values, clone them:
+ * `jsonpatch.applyPatch(document, jsonpatch._deepClone(patch))`.
+ *
+ * @param document The document to patch
+ * @param patch The patch to apply
+ * @param validateOperation `false` is without validation, `true` to use default jsonpatch's validation, or you can pass a `validateOperation` callback to be used for validation.
+ * @param mutateDocument Whether to mutate the original document or clone it before applying
+ * @param banPrototypeModifications Whether to ban modifications to `__proto__`, defaults to `true`.
+ * @return An array of `{newDocument, result}` after the patch
+ */
+function applyPatch(document, patch, validateOperation, mutateDocument, banPrototypeModifications) {
+    if (mutateDocument === void 0) { mutateDocument = true; }
+    if (banPrototypeModifications === void 0) { banPrototypeModifications = true; }
+    if (validateOperation) {
+        if (!Array.isArray(patch)) {
+            throw new exports.JsonPatchError('Patch sequence must be an array', 'SEQUENCE_NOT_AN_ARRAY');
+        }
+    }
+    if (!mutateDocument) {
+        document = helpers_js_1._deepClone(document);
+    }
+    var results = new Array(patch.length);
+    for (var i = 0, length_1 = patch.length; i < length_1; i++) {
+        // we don't need to pass mutateDocument argument because if it was true, we already deep cloned the object, we'll just pass `true`
+        results[i] = applyOperation(document, patch[i], validateOperation, true, banPrototypeModifications, i);
+        document = results[i].newDocument; // in case root was replaced
+    }
+    results.newDocument = document;
+    return results;
+}
+exports.applyPatch = applyPatch;
+/**
+ * Apply a single JSON Patch Operation on a JSON document.
+ * Returns the updated document.
+ * Suitable as a reducer.
+ *
+ * @param document The document to patch
+ * @param operation The operation to apply
+ * @return The updated document
+ */
+function applyReducer(document, operation, index) {
+    var operationResult = applyOperation(document, operation);
+    if (operationResult.test === false) { // failed test
+        throw new exports.JsonPatchError("Test operation failed", 'TEST_OPERATION_FAILED', index, operation, document);
+    }
+    return operationResult.newDocument;
+}
+exports.applyReducer = applyReducer;
+/**
+ * Validates a single operation. Called from `jsonpatch.validate`. Throws `JsonPatchError` in case of an error.
+ * @param {object} operation - operation object (patch)
+ * @param {number} index - index of operation in the sequence
+ * @param {object} [document] - object where the operation is supposed to be applied
+ * @param {string} [existingPathFragment] - comes along with `document`
+ */
+function validator(operation, index, document, existingPathFragment) {
+    if (typeof operation !== 'object' || operation === null || Array.isArray(operation)) {
+        throw new exports.JsonPatchError('Operation is not an object', 'OPERATION_NOT_AN_OBJECT', index, operation, document);
+    }
+    else if (!objOps[operation.op]) {
+        throw new exports.JsonPatchError('Operation `op` property is not one of operations defined in RFC-6902', 'OPERATION_OP_INVALID', index, operation, document);
+    }
+    else if (typeof operation.path !== 'string') {
+        throw new exports.JsonPatchError('Operation `path` property is not a string', 'OPERATION_PATH_INVALID', index, operation, document);
+    }
+    else if (operation.path.indexOf('/') !== 0 && operation.path.length > 0) {
+        // paths that aren't empty string should start with "/"
+        throw new exports.JsonPatchError('Operation `path` property must start with "/"', 'OPERATION_PATH_INVALID', index, operation, document);
+    }
+    else if ((operation.op === 'move' || operation.op === 'copy') && typeof operation.from !== 'string') {
+        throw new exports.JsonPatchError('Operation `from` property is not present (applicable in `move` and `copy` operations)', 'OPERATION_FROM_REQUIRED', index, operation, document);
+    }
+    else if ((operation.op === 'add' || operation.op === 'replace' || operation.op === 'test') && operation.value === undefined) {
+        throw new exports.JsonPatchError('Operation `value` property is not present (applicable in `add`, `replace` and `test` operations)', 'OPERATION_VALUE_REQUIRED', index, operation, document);
+    }
+    else if ((operation.op === 'add' || operation.op === 'replace' || operation.op === 'test') && helpers_js_1.hasUndefined(operation.value)) {
+        throw new exports.JsonPatchError('Operation `value` property is not present (applicable in `add`, `replace` and `test` operations)', 'OPERATION_VALUE_CANNOT_CONTAIN_UNDEFINED', index, operation, document);
+    }
+    else if (document) {
+        if (operation.op == "add") {
+            var pathLen = operation.path.split("/").length;
+            var existingPathLen = existingPathFragment.split("/").length;
+            if (pathLen !== existingPathLen + 1 && pathLen !== existingPathLen) {
+                throw new exports.JsonPatchError('Cannot perform an `add` operation at the desired path', 'OPERATION_PATH_CANNOT_ADD', index, operation, document);
+            }
+        }
+        else if (operation.op === 'replace' || operation.op === 'remove' || operation.op === '_get') {
+            if (operation.path !== existingPathFragment) {
+                throw new exports.JsonPatchError('Cannot perform the operation at a path that does not exist', 'OPERATION_PATH_UNRESOLVABLE', index, operation, document);
+            }
+        }
+        else if (operation.op === 'move' || operation.op === 'copy') {
+            var existingValue = { op: "_get", path: operation.from, value: undefined };
+            var error = validate([existingValue], document);
+            if (error && error.name === 'OPERATION_PATH_UNRESOLVABLE') {
+                throw new exports.JsonPatchError('Cannot perform the operation from a path that does not exist', 'OPERATION_FROM_UNRESOLVABLE', index, operation, document);
+            }
+        }
+    }
+}
+exports.validator = validator;
+/**
+ * Validates a sequence of operations. If `document` parameter is provided, the sequence is additionally validated against the object document.
+ * If error is encountered, returns a JsonPatchError object
+ * @param sequence
+ * @param document
+ * @returns {JsonPatchError|undefined}
+ */
+function validate(sequence, document, externalValidator) {
+    try {
+        if (!Array.isArray(sequence)) {
+            throw new exports.JsonPatchError('Patch sequence must be an array', 'SEQUENCE_NOT_AN_ARRAY');
+        }
+        if (document) {
+            //clone document and sequence so that we can safely try applying operations
+            applyPatch(helpers_js_1._deepClone(document), helpers_js_1._deepClone(sequence), externalValidator || true);
+        }
+        else {
+            externalValidator = externalValidator || validator;
+            for (var i = 0; i < sequence.length; i++) {
+                externalValidator(sequence[i], i, document, undefined);
+            }
+        }
+    }
+    catch (e) {
+        if (e instanceof exports.JsonPatchError) {
+            return e;
+        }
+        else {
+            throw e;
+        }
+    }
+}
+exports.validate = validate;
+// based on https://github.com/epoberezkin/fast-deep-equal
+// MIT License
+// Copyright (c) 2017 Evgeny Poberezkin
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+function _areEquals(a, b) {
+    if (a === b)
+        return true;
+    if (a && b && typeof a == 'object' && typeof b == 'object') {
+        var arrA = Array.isArray(a), arrB = Array.isArray(b), i, length, key;
+        if (arrA && arrB) {
+            length = a.length;
+            if (length != b.length)
+                return false;
+            for (i = length; i-- !== 0;)
+                if (!_areEquals(a[i], b[i]))
+                    return false;
+            return true;
+        }
+        if (arrA != arrB)
+            return false;
+        var keys = Object.keys(a);
+        length = keys.length;
+        if (length !== Object.keys(b).length)
+            return false;
+        for (i = length; i-- !== 0;)
+            if (!b.hasOwnProperty(keys[i]))
+                return false;
+        for (i = length; i-- !== 0;) {
+            key = keys[i];
+            if (!_areEquals(a[key], b[key]))
+                return false;
+        }
+        return true;
+    }
+    return a !== a && b !== b;
+}
+exports._areEquals = _areEquals;
+;
+
+
+/***/ }),
 /* 384 */,
 /* 385 */,
 /* 386 */
@@ -7802,40 +8849,7 @@ module.exports = new Type('tag:yaml.org,2002:js/undefined', {
 
 
 /***/ }),
-/* 387 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var baseIsEqualDeep = __webpack_require__(600),
-    isObjectLike = __webpack_require__(337);
-
-/**
- * The base implementation of `_.isEqual` which supports partial comparisons
- * and tracks traversed objects.
- *
- * @private
- * @param {*} value The value to compare.
- * @param {*} other The other value to compare.
- * @param {boolean} bitmask The bitmask flags.
- *  1 - Unordered comparison
- *  2 - Partial comparison
- * @param {Function} [customizer] The function to customize comparisons.
- * @param {Object} [stack] Tracks traversed `value` and `other` objects.
- * @returns {boolean} Returns `true` if the values are equivalent, else `false`.
- */
-function baseIsEqual(value, other, bitmask, customizer, stack) {
-  if (value === other) {
-    return true;
-  }
-  if (value == null || other == null || (!isObjectLike(value) && !isObjectLike(other))) {
-    return value !== value && other !== other;
-  }
-  return baseIsEqualDeep(value, other, bitmask, customizer, baseIsEqual, stack);
-}
-
-module.exports = baseIsEqual;
-
-
-/***/ }),
+/* 387 */,
 /* 388 */,
 /* 389 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
@@ -8059,7 +9073,7 @@ module.exports = isFlattenable;
 /* 412 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
-var baseGetTag = __webpack_require__(190),
+var baseGetTag = __webpack_require__(51),
     isLength = __webpack_require__(56),
     isObjectLike = __webpack_require__(337);
 
@@ -8283,7 +9297,7 @@ var _find = _interopRequireDefault(__webpack_require__(84));
 
 var _noop = _interopRequireDefault(__webpack_require__(439));
 
-var _lib = _interopRequireDefault(__webpack_require__(303));
+var _lib = _interopRequireDefault(__webpack_require__(192));
 
 var _refs = _interopRequireDefault(__webpack_require__(217));
 
@@ -9072,7 +10086,7 @@ module.exports = stringToPath;
 /* 444 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
-var baseGetTag = __webpack_require__(190),
+var baseGetTag = __webpack_require__(51),
     isArray = __webpack_require__(143),
     isObjectLike = __webpack_require__(337);
 
@@ -12784,102 +13798,7 @@ module.exports = toSource;
 /* 478 */,
 /* 479 */,
 /* 480 */,
-/* 481 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-const fetch = __webpack_require__(454)
-
-const ROLLBAR_API = 'https://api.rollbar.com'
-
-
-const getApiContext = async ({token, environment}) => {
-    const HEADERS = { "X-Rollbar-Access-Token" : token }
-    const deployResponse = await fetch(`${ROLLBAR_API}/api/1/deploys`, { headers : HEADERS })
-    if (deployResponse.status !== 200) {
-        throw new Error(`Rollbar API Error: ${deployResponse.status}`)
-    }
-
-    const deploys = await deployResponse.json()
-
-    if (deploys.err === 1) {
-        throw new Error(deploys.message)
-    }
-
-    if (deploys.err === 0 && deploys.result.deploys.length === 0 ){
-        return null
-    }
-
-    const lastDeploy = deploys.result.deploys[0]
-    const versionsResponse =
-        await fetch(`${ROLLBAR_API}/api/1/versions/${lastDeploy.revision}?environment=${environment}`,
-            { headers : HEADERS })
-    const versions = await versionsResponse.json()
-
-    if (versions.err === 1) {
-        throw new Error(versions.message)
-    }
-    return versions.result
-}
-
-const ICON_IMG = "https://user-images.githubusercontent.com/27153/90803304-65a97980-e2cd-11ea-8267-a711fdcc6bc9.png"
-
-exports.getSummary = async ({token, yamlConfig}) => {
-    const { environment, account, project } = yamlConfig
-
-    try {
-        const context = await getApiContext({token, environment})
-        if (context === null) {
-            return {
-
-            }
-        }
-        var status = "unknown"
-        var message = "Rollbar data unavailable"
-        const details = [
-            {
-                message : `Version ${context.version} has ${context.item_stats.new.critical} critical errors.`
-            }
-        ]
-
-        const errors = context.item_stats.new.error
-        if (errors > 0) {
-            status = "warn"
-            message = "New errors have been detected since last deploy"
-        }
-
-        const critical = context.item_stats.new.critical
-        if (critical > 0) {
-            status = "error"
-            message = "New critical errors have been detected since last deploy"
-        }
-
-        if (errors + critical === 0) {
-            status = "ok"
-            message = "No new errors detected since last deploy"
-        }
-
-        // eslint-disable-next-line max-len
-        const summaryLink = `https://rollbar.com/${account}/${project}/versions/${environment}/${context.version}`
-
-        return {
-            status,
-            message,
-            summaryLink,
-            details,
-            context,
-            logo : ICON_IMG
-        }
-    } catch (e) {
-        return {
-            "status"  : "unknown",
-            "message" : `Rollbar API Error: ${e.message}`,
-            logo      : ICON_IMG,
-        }
-    }
-}
-
-
-/***/ }),
+/* 481 */,
 /* 482 */,
 /* 483 */,
 /* 484 */,
@@ -13481,7 +14400,105 @@ function encodePrimitive({
 /* 524 */,
 /* 525 */,
 /* 526 */,
-/* 527 */,
+/* 527 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+/**
+ * Module dependencies.
+ */
+var path = __webpack_require__(622),
+  spawn  = __webpack_require__(129).spawn,
+  temp = __webpack_require__(608),
+  fs = __webpack_require__(747),
+  fsExt = __webpack_require__(68),
+  Graph = __webpack_require__(271).Graph;
+
+/**
+ * Create a new undirected graph
+ * @constructor
+ * @param {String} id The graphID
+ * @return {Graph}
+ * @api public
+ */
+exports.graph = function(id) {
+  var graph = new Graph(null, id);
+  graph.type = 'graph';
+  return graph;
+};
+
+/**
+ * Create a new directed graph
+ * @constructor
+ * @param {String} id The graphID
+ * @return {Graph}
+ * @api public
+ */
+exports.digraph = function(id) {
+  var graph = new Graph(null, id);
+  graph.type = 'digraph';
+  return graph;
+};
+
+function _parse(file, callback, errback) {
+  var gvprScript = __webpack_require__.ab + "dot2js.g",
+    parameters = ["-f" + gvprScript, file],
+    cmd = "gvpr",
+    __graph_eval,
+    err = '',
+    out = '',
+    graphviz = spawn(cmd, parameters);
+
+  graphviz.stdout.on('data', function(data) {
+    out += data;
+    eval(data.toString());
+  });
+  graphviz.stderr.on('data', function(data) {
+    err += data;
+  });
+  graphviz.stdin.end();
+  graphviz.on('exit', function(code) {
+    if(code !== 0 || __graph_eval === undefined) {
+      if(errback) {
+        errback(code, out, err);
+      }
+    } else {
+      callback(__graph_eval);
+    }
+  });
+}
+/**
+ * Create a new graph from a dot script
+ * @constructor
+ * @param {String} file_or_script The DOT script or file
+ * @param {Function} callback
+ * @param {Function} errback
+ * @api public
+ */
+exports.parse = function(file_or_script, callback, errback) {
+  if(fsExt.exist(file_or_script)) {
+    _parse(file_or_script, callback, errback);
+  } else {
+    temp.open('node-graphviz', function(err, info) {
+      if(err) {
+        return errback(err);
+      }
+      fs.write(info.fd, file_or_script, function(err) {
+        if(err) {
+          return errback(err);
+        }
+        fs.close(info.fd, function(err) {
+          if(err) {
+            return errback(err);
+          }
+          _parse(info.path, callback, errback);
+        });
+      });
+    });
+  }
+};
+
+
+/***/ }),
 /* 528 */,
 /* 529 */,
 /* 530 */,
@@ -13955,7 +14972,33 @@ module.exports = YAMLException;
 
 /***/ }),
 /* 557 */,
-/* 558 */,
+/* 558 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+const yaml = __webpack_require__(414)
+const path = __webpack_require__(622)
+const fs = __webpack_require__(747)
+
+const LIGHTSTEP_CONFIG_FILE = process.env.LIGHTSTEP_CONFIG_FILE || '.lightstep.yml'
+
+function configExists() {
+    return fs.existsSync(path.join(process.env.GITHUB_WORKSPACE, LIGHTSTEP_CONFIG_FILE))
+}
+
+function loadConfig() {
+    try {
+        let fileContents = fs.readFileSync(path.join(process.env.GITHUB_WORKSPACE, LIGHTSTEP_CONFIG_FILE), 'utf8')
+        const yamlConfig = yaml.safeLoadAll(fileContents)
+        return yamlConfig[0]
+    } catch (e) {
+        return { integrations : {} }
+    }
+}
+
+exports.configExists = configExists
+exports.loadConfig = loadConfig
+
+/***/ }),
 /* 559 */,
 /* 560 */,
 /* 561 */,
@@ -14097,7 +15140,7 @@ module.exports = new Schema({
 /* 585 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
-var baseGetTag = __webpack_require__(190),
+var baseGetTag = __webpack_require__(51),
     getPrototype = __webpack_require__(931),
     isObjectLike = __webpack_require__(337);
 
@@ -14533,7 +15576,156 @@ module.exports = require("http");
 /***/ }),
 /* 606 */,
 /* 607 */,
-/* 608 */,
+/* 608 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+var fs   = __webpack_require__(747),
+    path = __webpack_require__(622);
+
+/* HELPERS */
+
+var defaultDirectory = '/tmp';
+var environmentVariables = ['TMPDIR', 'TMP', 'TEMP'];
+
+var getTempDirPath = function() {
+  for(var i = 0; i < environmentVariables.length; i++) {
+    var value = process.env[environmentVariables[i]];
+    if(value)
+      return fs.realpathSync(value);
+  }
+  return fs.realpathSync(defaultDirectory);
+}
+
+var generateName = function(rawAffixes, defaultPrefix) {
+  var affixes = parseAffixes(rawAffixes, defaultPrefix);
+  var now = new Date();
+  var name = [affixes.prefix,
+              now.getYear(), now.getMonth(), now.getDay(),
+              '-',
+              process.pid,
+              '-',
+              (Math.random() * 0x100000000 + 1).toString(36),
+              affixes.suffix].join('');
+  return path.join(exports.dir, name);
+}
+
+var parseAffixes = function(rawAffixes, defaultPrefix) {
+  var affixes = {prefix: null, suffix: null};
+  if(rawAffixes) {
+    switch (typeof(rawAffixes)) {
+    case 'string':
+      affixes.prefix = rawAffixes;
+      break;
+    case 'object':
+      affixes = rawAffixes;
+      break
+    default:
+      throw("Unknown affix declaration: " + affixes);
+    }
+  } else {
+    affixes.prefix = defaultPrefix;
+  }
+  return affixes;
+}
+
+/* EXIT HANDLERS */
+
+/*
+ * When any temp file or directory is created, it is added to filesToDelete
+ * or dirsToDelete. The first time any temp file is created, a listener is
+ * added to remove all temp files and directories at exit.
+ */
+var exitListenerAttached = false;
+var filesToDelete = [];
+var dirsToDelete = [];
+
+var deleteFileOnExit = function(filePath) {
+  attachExitListener();
+  filesToDelete.push(filePath);
+};
+
+var deleteDirOnExit = function(dirPath) {
+  attachExitListener();
+  dirsToDelete.push(dirPath);
+};
+
+var attachExitListener = function() {
+  if (!exitListenerAttached) {
+    process.addListener('exit', cleanup);
+    exitListenerAttached = true;
+  }
+};
+
+var cleanupFiles = function() {
+  for (var i=0; i < filesToDelete.length; i++) {
+    try { fs.unlinkSync(filesToDelete[i]); }
+    catch (rmErr) { /* removed normally */ }
+  }
+};
+
+var cleanupDirs = function() {
+  for (var i=0; i < dirsToDelete.length; i++) {
+    try { fs.rmdirSync(dirsToDelete[i]); }
+    catch (rmErr) { /* removed normally */ }
+  }
+};
+
+var cleanup = function() {
+  cleanupFiles();
+  cleanupDirs();
+}
+
+/* DIRECTORIES */
+
+var mkdir = function(affixes, callback) {
+  var dirPath = generateName(affixes, 'd-');
+  fs.mkdir(dirPath, 0700, function(err) {
+    if (!err) {
+      deleteDirOnExit(dirPath);
+    }
+    if (callback)
+      callback(err, dirPath);
+  });
+}
+var mkdirSync = function(affixes) {
+  var dirPath = generateName(affixes, 'd-');
+  fs.mkdirSync(dirPath, 0700);
+  deleteDirOnExit(dirPath);
+  return dirPath;
+}
+
+/* FILES */
+
+var open = function(affixes, callback) {
+  var filePath = generateName(affixes, 'f-')
+  fs.open(filePath, 'w+', 0600, function(err, fd) {
+    if (!err)
+      deleteFileOnExit(filePath);
+    if (callback)
+      callback(err, {path: filePath, fd: fd});
+  });
+}
+
+var openSync = function(affixes) {
+  var filePath = generateName(affixes, 'f-')
+  var fd = fs.openSync(filePath, "w+", 0600);
+  deleteFileOnExit(filePath);
+  return {path: filePath, fd: fd};
+}
+
+
+/* EXPORTS */
+exports.dir = getTempDirPath();
+exports.mkdir = mkdir;
+exports.mkdirSync = mkdirSync;
+exports.open = open;
+exports.openSync = openSync;
+exports.path = generateName;
+exports.cleanup = cleanup;
+
+
+
+/***/ }),
 /* 609 */,
 /* 610 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
@@ -14651,7 +15843,95 @@ module.exports = nodeUtil;
 /***/ }),
 /* 617 */,
 /* 618 */,
-/* 619 */,
+/* 619 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+const lightstepContext = __webpack_require__(13)
+const rollbarContext = __webpack_require__(262)
+const pagerdutyContext = __webpack_require__(810)
+const { assertActionInput, resolveActionInput } = __webpack_require__(114)
+
+const core = __webpack_require__(470)
+const path = __webpack_require__(622)
+const fs = __webpack_require__(747)
+const template = __webpack_require__(716)
+
+
+const tmplFile = fs.readFileSync(__webpack_require__.ab + "pr.tmpl.md", 'utf8')
+const prTemplate = template(tmplFile)
+
+/*
+   * Determines status of all pre-deploy checks
+   * @param  {...any} states array of context summary statuses
+   */
+const actionState = (...states) => {
+    return (states.find(s => s === 'error') ||
+        states.find(s => s === 'warn') ||
+        states.find(s => s === 'unknown') ||
+        'ok')
+}
+
+function conditionStatus(s) {
+    switch (s.state) {
+    case "true":
+        return ":red_circle:"
+    case "false":
+        return ":green_circle:"
+    default:
+        return ":white_circle:"
+    }
+}
+
+function trafficLightStatus(s) {
+    switch (s) {
+    case "unknown":
+        return ":white_circle:"
+    case "error":
+        return ":red_circle:"
+    case "ok":
+        return ":green_circle:"
+    }
+}
+
+module.exports.predeploy = async function({ lightstepOrg, lightstepProj, lightstepToken, yamlFile, isRollup }) {
+    // Lightstep context
+    var templateContext = { trafficLightStatus, conditionStatus }
+    templateContext.lightstep = await lightstepContext.getSummary(
+        { lightstepOrg, lightstepProj, lightstepToken, lightstepConditions : yamlFile.conditions })
+
+    // Rollbar context
+    if (yamlFile.integrations && yamlFile.integrations.rollbar) {
+        assertActionInput('rollbar_api_token')
+        const token = resolveActionInput('rollbar_api_token')
+        templateContext.rollbar = await rollbarContext.getSummary(
+            { token : token, yamlConfig : yamlFile.integrations.rollbar })
+    } else {
+        templateContext.rollbar = false
+    }
+
+    // PagerDuty context
+    if (yamlFile.integrations && yamlFile.integrations.pagerduty) {
+        assertActionInput('pagerduty_api_token')
+        const token = resolveActionInput('pagerduty_api_token')
+        templateContext.pagerduty = await pagerdutyContext.getSummary(
+            { token : token, yamlConfig : yamlFile.integrations.pagerduty })
+    } else {
+        templateContext.pagerduty = false
+    }
+
+    templateContext.isRollup = isRollup
+    templateContext.status = actionState(
+        templateContext.lightstep.status,
+        templateContext.rollbar && templateContext.rollbar.status)
+
+    const markdown = prTemplate(templateContext)
+    core.setOutput('lightstep_predeploy_status', templateContext.status)
+    core.setOutput('lightstep_predeploy_md', markdown)
+    return Promise.resolve()
+}
+
+
+/***/ }),
 /* 620 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
@@ -14779,7 +16059,70 @@ module.exports = new Type('tag:yaml.org,2002:merge', {
 /* 634 */,
 /* 635 */,
 /* 636 */,
-/* 637 */,
+/* 637 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+/**
+ * Module dependencies
+ */
+var Hash = __webpack_require__(834).Hash,
+  Attributs = __webpack_require__(202).Attributs;
+
+/**
+ * Create a new node
+ * @constructor
+ * @param {Graph} graph Parent Graph
+ * @param {String} id The node ID
+ * @return {Node}
+ * @api public
+ */
+var Node = exports.Node = function(graph, id) {
+  this.relativeGraph = graph;
+  this.id = id;
+  this.attributs = new Attributs("N");
+};
+
+/**
+ *
+ */
+Node.prototype.to = function(id, attrs) {
+	this.relativeGraph.addEdge(this, id, attrs);
+	return this.relativeGraph.from(id);
+};
+
+/**
+ * Set a node attribut
+ *
+ * @param {String} name The attribut name
+ * @param {Void} value The attribut value
+ * @api public
+ */
+Node.prototype.set = function(name, value) {
+  this.attributs.set(name, value);
+  return this;
+};
+
+/**
+ * Get a node attribut
+ *
+ * @param {String} name The attribut name
+ * @return {Void}
+ * @api public
+ */
+Node.prototype.get = function(name) {
+  return this.attributs.get(name);
+};
+
+/**
+ * @api private
+ */
+Node.prototype.to_dot = function() {
+  var nodeOutput = '"' + this.id + '"' + this.attributs.to_dot();
+  return nodeOutput;
+};
+
+
+/***/ }),
 /* 638 */
 /***/ (function(module) {
 
@@ -16714,7 +18057,7 @@ exports.default = _default;
 exports.__esModule = true;
 exports.default = void 0;
 
-var _ = _interopRequireDefault(__webpack_require__(303));
+var _ = _interopRequireDefault(__webpack_require__(192));
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -16790,7 +18133,7 @@ var DataView = __webpack_require__(210),
     Promise = __webpack_require__(154),
     Set = __webpack_require__(423),
     WeakMap = __webpack_require__(379),
-    baseGetTag = __webpack_require__(190),
+    baseGetTag = __webpack_require__(51),
     toSource = __webpack_require__(473);
 
 /** `Object#toString` result references. */
@@ -16972,3202 +18315,7 @@ module.exports = isSet;
 /***/ }),
 /* 714 */,
 /* 715 */,
-/* 716 */,
-/* 717 */,
-/* 718 */,
-/* 719 */,
-/* 720 */,
-/* 721 */
-/***/ (function(module) {
-
-var traverse = module.exports = function (obj) {
-    return new Traverse(obj);
-};
-
-function Traverse (obj) {
-    this.value = obj;
-}
-
-Traverse.prototype.get = function (ps) {
-    var node = this.value;
-    for (var i = 0; i < ps.length; i ++) {
-        var key = ps[i];
-        if (!node || !hasOwnProperty.call(node, key)) {
-            node = undefined;
-            break;
-        }
-        node = node[key];
-    }
-    return node;
-};
-
-Traverse.prototype.has = function (ps) {
-    var node = this.value;
-    for (var i = 0; i < ps.length; i ++) {
-        var key = ps[i];
-        if (!node || !hasOwnProperty.call(node, key)) {
-            return false;
-        }
-        node = node[key];
-    }
-    return true;
-};
-
-Traverse.prototype.set = function (ps, value) {
-    var node = this.value;
-    for (var i = 0; i < ps.length - 1; i ++) {
-        var key = ps[i];
-        if (!hasOwnProperty.call(node, key)) node[key] = {};
-        node = node[key];
-    }
-    node[ps[i]] = value;
-    return value;
-};
-
-Traverse.prototype.map = function (cb) {
-    return walk(this.value, cb, true);
-};
-
-Traverse.prototype.forEach = function (cb) {
-    this.value = walk(this.value, cb, false);
-    return this.value;
-};
-
-Traverse.prototype.reduce = function (cb, init) {
-    var skip = arguments.length === 1;
-    var acc = skip ? this.value : init;
-    this.forEach(function (x) {
-        if (!this.isRoot || !skip) {
-            acc = cb.call(this, acc, x);
-        }
-    });
-    return acc;
-};
-
-Traverse.prototype.paths = function () {
-    var acc = [];
-    this.forEach(function (x) {
-        acc.push(this.path); 
-    });
-    return acc;
-};
-
-Traverse.prototype.nodes = function () {
-    var acc = [];
-    this.forEach(function (x) {
-        acc.push(this.node);
-    });
-    return acc;
-};
-
-Traverse.prototype.clone = function () {
-    var parents = [], nodes = [];
-    
-    return (function clone (src) {
-        for (var i = 0; i < parents.length; i++) {
-            if (parents[i] === src) {
-                return nodes[i];
-            }
-        }
-        
-        if (typeof src === 'object' && src !== null) {
-            var dst = copy(src);
-            
-            parents.push(src);
-            nodes.push(dst);
-            
-            forEach(objectKeys(src), function (key) {
-                dst[key] = clone(src[key]);
-            });
-            
-            parents.pop();
-            nodes.pop();
-            return dst;
-        }
-        else {
-            return src;
-        }
-    })(this.value);
-};
-
-function walk (root, cb, immutable) {
-    var path = [];
-    var parents = [];
-    var alive = true;
-    
-    return (function walker (node_) {
-        var node = immutable ? copy(node_) : node_;
-        var modifiers = {};
-        
-        var keepGoing = true;
-        
-        var state = {
-            node : node,
-            node_ : node_,
-            path : [].concat(path),
-            parent : parents[parents.length - 1],
-            parents : parents,
-            key : path.slice(-1)[0],
-            isRoot : path.length === 0,
-            level : path.length,
-            circular : null,
-            update : function (x, stopHere) {
-                if (!state.isRoot) {
-                    state.parent.node[state.key] = x;
-                }
-                state.node = x;
-                if (stopHere) keepGoing = false;
-            },
-            'delete' : function (stopHere) {
-                delete state.parent.node[state.key];
-                if (stopHere) keepGoing = false;
-            },
-            remove : function (stopHere) {
-                if (isArray(state.parent.node)) {
-                    state.parent.node.splice(state.key, 1);
-                }
-                else {
-                    delete state.parent.node[state.key];
-                }
-                if (stopHere) keepGoing = false;
-            },
-            keys : null,
-            before : function (f) { modifiers.before = f },
-            after : function (f) { modifiers.after = f },
-            pre : function (f) { modifiers.pre = f },
-            post : function (f) { modifiers.post = f },
-            stop : function () { alive = false },
-            block : function () { keepGoing = false }
-        };
-        
-        if (!alive) return state;
-        
-        function updateState() {
-            if (typeof state.node === 'object' && state.node !== null) {
-                if (!state.keys || state.node_ !== state.node) {
-                    state.keys = objectKeys(state.node)
-                }
-                
-                state.isLeaf = state.keys.length == 0;
-                
-                for (var i = 0; i < parents.length; i++) {
-                    if (parents[i].node_ === node_) {
-                        state.circular = parents[i];
-                        break;
-                    }
-                }
-            }
-            else {
-                state.isLeaf = true;
-                state.keys = null;
-            }
-            
-            state.notLeaf = !state.isLeaf;
-            state.notRoot = !state.isRoot;
-        }
-        
-        updateState();
-        
-        // use return values to update if defined
-        var ret = cb.call(state, state.node);
-        if (ret !== undefined && state.update) state.update(ret);
-        
-        if (modifiers.before) modifiers.before.call(state, state.node);
-        
-        if (!keepGoing) return state;
-        
-        if (typeof state.node == 'object'
-        && state.node !== null && !state.circular) {
-            parents.push(state);
-            
-            updateState();
-            
-            forEach(state.keys, function (key, i) {
-                path.push(key);
-                
-                if (modifiers.pre) modifiers.pre.call(state, state.node[key], key);
-                
-                var child = walker(state.node[key]);
-                if (immutable && hasOwnProperty.call(state.node, key)) {
-                    state.node[key] = child.node;
-                }
-                
-                child.isLast = i == state.keys.length - 1;
-                child.isFirst = i == 0;
-                
-                if (modifiers.post) modifiers.post.call(state, child);
-                
-                path.pop();
-            });
-            parents.pop();
-        }
-        
-        if (modifiers.after) modifiers.after.call(state, state.node);
-        
-        return state;
-    })(root).node;
-}
-
-function copy (src) {
-    if (typeof src === 'object' && src !== null) {
-        var dst;
-        
-        if (isArray(src)) {
-            dst = [];
-        }
-        else if (isDate(src)) {
-            dst = new Date(src.getTime ? src.getTime() : src);
-        }
-        else if (isRegExp(src)) {
-            dst = new RegExp(src);
-        }
-        else if (isError(src)) {
-            dst = { message: src.message };
-        }
-        else if (isBoolean(src)) {
-            dst = new Boolean(src);
-        }
-        else if (isNumber(src)) {
-            dst = new Number(src);
-        }
-        else if (isString(src)) {
-            dst = new String(src);
-        }
-        else if (Object.create && Object.getPrototypeOf) {
-            dst = Object.create(Object.getPrototypeOf(src));
-        }
-        else if (src.constructor === Object) {
-            dst = {};
-        }
-        else {
-            var proto =
-                (src.constructor && src.constructor.prototype)
-                || src.__proto__
-                || {}
-            ;
-            var T = function () {};
-            T.prototype = proto;
-            dst = new T;
-        }
-        
-        forEach(objectKeys(src), function (key) {
-            dst[key] = src[key];
-        });
-        return dst;
-    }
-    else return src;
-}
-
-var objectKeys = Object.keys || function keys (obj) {
-    var res = [];
-    for (var key in obj) res.push(key)
-    return res;
-};
-
-function toS (obj) { return Object.prototype.toString.call(obj) }
-function isDate (obj) { return toS(obj) === '[object Date]' }
-function isRegExp (obj) { return toS(obj) === '[object RegExp]' }
-function isError (obj) { return toS(obj) === '[object Error]' }
-function isBoolean (obj) { return toS(obj) === '[object Boolean]' }
-function isNumber (obj) { return toS(obj) === '[object Number]' }
-function isString (obj) { return toS(obj) === '[object String]' }
-
-var isArray = Array.isArray || function isArray (xs) {
-    return Object.prototype.toString.call(xs) === '[object Array]';
-};
-
-var forEach = function (xs, fn) {
-    if (xs.forEach) return xs.forEach(fn)
-    else for (var i = 0; i < xs.length; i++) {
-        fn(xs[i], i, xs);
-    }
-};
-
-forEach(objectKeys(Traverse.prototype), function (key) {
-    traverse[key] = function (obj) {
-        var args = [].slice.call(arguments, 1);
-        var t = new Traverse(obj);
-        return t[key].apply(t, args);
-    };
-});
-
-var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
-    return key in obj;
-};
-
-
-/***/ }),
-/* 722 */,
-/* 723 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-"use strict";
-// JS-YAML's default schema for `safeLoad` function.
-// It is not described in the YAML specification.
-//
-// This schema is based on standard YAML's Core schema and includes most of
-// extra types described at YAML tag repository. (http://yaml.org/type/)
-
-
-
-
-
-var Schema = __webpack_require__(43);
-
-
-module.exports = new Schema({
-  include: [
-    __webpack_require__(611)
-  ],
-  implicit: [
-    __webpack_require__(841),
-    __webpack_require__(633)
-  ],
-  explicit: [
-    __webpack_require__(913),
-    __webpack_require__(842),
-    __webpack_require__(947),
-    __webpack_require__(100)
-  ]
-});
-
-
-/***/ }),
-/* 724 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var memoize = __webpack_require__(507);
-
-/** Used as the maximum memoize cache size. */
-var MAX_MEMOIZE_SIZE = 500;
-
-/**
- * A specialized version of `_.memoize` which clears the memoized function's
- * cache when it exceeds `MAX_MEMOIZE_SIZE`.
- *
- * @private
- * @param {Function} func The function to have its output memoized.
- * @returns {Function} Returns the new memoized function.
- */
-function memoizeCapped(func) {
-  var result = memoize(func, function(key) {
-    if (cache.size === MAX_MEMOIZE_SIZE) {
-      cache.clear();
-    }
-    return key;
-  });
-
-  var cache = result.cache;
-  return result;
-}
-
-module.exports = memoizeCapped;
-
-
-/***/ }),
-/* 725 */,
-/* 726 */,
-/* 727 */
-/***/ (function(module) {
-
-/**
- * A specialized version of `_.map` for arrays without support for iteratee
- * shorthands.
- *
- * @private
- * @param {Array} [array] The array to iterate over.
- * @param {Function} iteratee The function invoked per iteration.
- * @returns {Array} Returns the new mapped array.
- */
-function arrayMap(array, iteratee) {
-  var index = -1,
-      length = array == null ? 0 : array.length,
-      result = Array(length);
-
-  while (++index < length) {
-    result[index] = iteratee(array[index], index, array);
-  }
-  return result;
-}
-
-module.exports = arrayMap;
-
-
-/***/ }),
-/* 728 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var baseIsEqual = __webpack_require__(387),
-    get = __webpack_require__(0),
-    hasIn = __webpack_require__(360),
-    isKey = __webpack_require__(90),
-    isStrictComparable = __webpack_require__(854),
-    matchesStrictComparable = __webpack_require__(2),
-    toKey = __webpack_require__(503);
-
-/** Used to compose bitmasks for value comparisons. */
-var COMPARE_PARTIAL_FLAG = 1,
-    COMPARE_UNORDERED_FLAG = 2;
-
-/**
- * The base implementation of `_.matchesProperty` which doesn't clone `srcValue`.
- *
- * @private
- * @param {string} path The path of the property to get.
- * @param {*} srcValue The value to match.
- * @returns {Function} Returns the new spec function.
- */
-function baseMatchesProperty(path, srcValue) {
-  if (isKey(path) && isStrictComparable(srcValue)) {
-    return matchesStrictComparable(toKey(path), srcValue);
-  }
-  return function(object) {
-    var objValue = get(object, path);
-    return (objValue === undefined && objValue === srcValue)
-      ? hasIn(object, path)
-      : baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG);
-  };
-}
-
-module.exports = baseMatchesProperty;
-
-
-/***/ }),
-/* 729 */,
-/* 730 */,
-/* 731 */
-/***/ (function(__unusedmodule, exports) {
-
-"use strict";
-
-
-exports.__esModule = true;
-exports.default = serialize;
-
-/*
-  Serializer that serializes according to a media type instead of OpenAPI's
-  `style` + `explode` constructs.
-*/
-function serialize(value, mediaType) {
-  if (mediaType.includes('application/json')) {
-    if (typeof value === 'string') {
-      // Assume the user has a JSON string
-      return value;
-    }
-
-    return JSON.stringify(value);
-  }
-
-  return value.toString();
-}
-
-/***/ }),
-/* 732 */
-/***/ (function(module) {
-
-module.exports = {"consumes":["application/json"],"produces":["application/json"],"schemes":["https","http"],"swagger":"2.0","info":{"description":"LightStep x[PM] JSON APIs","title":"LightStep Public API","termsOfService":"This is an early-access API that may change.","version":"0.2"},"host":"api.lightstep.com","basePath":"/public/v0.2","paths":{"/{organization}/projects":{"get":{"description":"Returns information about all projects in an organization","produces":["application/json"],"tags":["Projects"],"summary":"List Projects","operationId":"listProjectsID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about all projects in the organization"},"400":{"description":"No organization parameter provided"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"}}}},"/{organization}/projects/{project}":{"get":{"description":"Returns information about a specific project","produces":["application/json"],"tags":["Projects"],"summary":"Get Project","operationId":"getProjectID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about all projects in the project"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}}},"/{organization}/projects/{project}/conditions":{"get":{"description":"Returns information about all conditions in a project","produces":["application/json"],"tags":["Conditions"],"summary":"List Conditions","operationId":"listConditionsID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about all conditions in the project"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}},"post":{"description":"Creates a new condition. You create conditions for thresholds that mark [SLAs or metrics](https://docs.lightstep.com/docs/create-alert-conditions-and-rules) on a Stream that you want to be warned about.","produces":["application/json"],"tags":["Conditions"],"summary":"Create Condition","operationId":"postConditionID","parameters":[{"description":"Condition definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/conditionRequestBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"The condition was created successfully"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}}},"/{organization}/projects/{project}/conditions/{condition-id}":{"get":{"description":"Returns information about a specific condition. Include the organization, project, and condition identifier in the path parameter.","produces":["application/json"],"tags":["Conditions"],"summary":"Get Condition","operationId":"getConditionID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Condition identifier","name":"condition-id","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted data about the given condition"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"The condition identifier is not valid"}}},"delete":{"description":"Deletes an existing condition","produces":["application/json"],"tags":["Conditions"],"summary":"Delete Condition","operationId":"deleteConditionID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the condition to delete","name":"condition-id","in":"path","required":true}],"responses":{"204":{"description":"Condition was successfully deleted"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}},"patch":{"description":"Modifies the settings for an existing condition. You cannot modify the condition to refer to a different stream.","produces":["application/json"],"tags":["Conditions"],"summary":"Update Condition","operationId":"patchConditionID","parameters":[{"description":"Condition definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/conditionRequestBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the condition to modify","name":"condition-id","in":"path","required":true}],"responses":{"200":{"description":"The condition was updated successfully"},"400":{"description":"One or more parameter(s) are not valid"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"Condition identifier not found"}}}},"/{organization}/projects/{project}/conditions/{condition-id}/status":{"get":{"description":"Returns status information about a specific condition","produces":["application/json"],"tags":["Conditions"],"summary":"Get Condition Status","operationId":"getConditionStatusID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Condition identifier","name":"condition-id","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted data about the status of the given condition"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"The condition identifier is not valid"}}}},"/{organization}/projects/{project}/dashboard/{dashboard-id}":{"delete":{"description":"Deletes an existing dashboard. Deleting a dashboard only deletes the dashboard; the Streams are still available.","produces":["application/json"],"tags":["Dashboards"],"summary":"Delete Dashboard","operationId":"deleteDashboardID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the dashboard to delete","name":"dashboard-id","in":"path","required":true}],"responses":{"204":{"description":"Dashboard was successfully deleted"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"Dashboard identifier not found"}}}},"/{organization}/projects/{project}/dashboards":{"get":{"description":"Returns information about all dashboards in a project","produces":["application/json"],"tags":["Dashboards"],"summary":"List Dashboards","operationId":"listDashboardsID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about all dashboards in the project"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}},"post":{"description":"Creates a new dashboard, with inline stream definitions. Automatically creates the necessary streams if they do not already exist.","produces":["application/json"],"tags":["Dashboards"],"summary":"Create Dashboard","operationId":"createDashboardID","parameters":[{"description":"Dashboard definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/dashboardRequestBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"The dashboard was created (or updated) successfully"},"400":{"description":"No organization parameter provided"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}}},"/{organization}/projects/{project}/dashboards/{dashboard-id}":{"get":{"description":"Returns complete information about a specific dashboard, including stream definitions","produces":["application/json"],"tags":["Dashboards"],"summary":"Get Dashboard","operationId":"getDashboardID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Dashboard identifier","name":"dashboard-id","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about the dashboard"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name or dashboard ID is not found"}}},"patch":{"description":"Updates the dashboard with a new name (if applicable), and replaces the set of streams on the dashboard. Streams that are removed from the dashboard will not be deleted from the project. Streams that are not supplied are removed from the dashboard.","produces":["application/json"],"tags":["Dashboards"],"summary":"Update Dashboard","operationId":"patchDashboardID","parameters":[{"description":"Dashboard definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/dashboardRequestBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the dashboard to modify","name":"dashboard-id","in":"path","required":true}],"responses":{"200":{"description":"The dashboard was updated successfully"},"400":{"description":"One or more parameter(s) are not valid"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"Dashboard identifier not found"}}}},"/{organization}/projects/{project}/destinations":{"get":{"description":"Returns information about all destinations in a project. Include the organization and project in the path parameter.","produces":["application/json"],"tags":["Destinations"],"summary":"List Destinations","operationId":"listDestinations","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted data about the given destination"},"401":{"description":"The API key does not provide access to this resource (such as a project or organization)"},"404":{"description":"Project name is not found"},"500":{"description":"Internal service error (retryable)"}}},"post":{"description":"Creates a new destination. Note: To create a Slack destination, you must first [enable a Slack workspace integration](https://docs.lightstep.com/docs/create-and-manage-destinations#add-a-slack-workspace-integration) in the General Settings page. To create a PagerDuty destination, you must provide a [PagerDuty integration key](https://support.pagerduty.com/docs/services-and-integrations).","produces":["application/json"],"tags":["Destinations"],"summary":"Create Destination","operationId":"postDestinationID","parameters":[{"description":"Destination definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/destinationRequestBodyExample"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"The destination was created successfully"},"401":{"description":"The API key does not provide access to this resource (such as a project or organization)"},"404":{"description":"Project name is not found"},"500":{"description":"Internal service error (retryable)"}}}},"/{organization}/projects/{project}/destinations/{destination-id}":{"get":{"description":"Returns information about a specific destination. Include the organization, project, and destination identifier in the path parameter.","produces":["application/json"],"tags":["Destinations"],"summary":"Get Destination","operationId":"getDestinationID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Destination identifier","name":"destination-id","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted data about the given destination"},"401":{"description":"The API key does not provide access to this resource (such as a project or organization)"},"404":{"description":"Project name is not found or destination identifier is not found"},"500":{"description":"Internal service error (retryable)"}}},"delete":{"description":"Deletes an existing destination","produces":["application/json"],"tags":["Destinations"],"summary":"Delete Destination","operationId":"deleteDestinationID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the destination to delete","name":"destination-id","in":"path","required":true}],"responses":{"204":{"description":"The destination was successfully deleted"},"401":{"description":"The API Key does not provide access to this resource"},"404":{"description":"Project name or destination ID is not found"},"500":{"description":"Internal service error (retryable)"}}}},"/{organization}/projects/{project}/directory/services":{"get":{"description":"Returns all reporting services for a project","produces":["application/json"],"tags":["Services"],"summary":"List Services","operationId":"listServicesID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"integer","description":"Service object count limit in paginated response","name":"limit","in":"query"},{"type":"integer","description":"Service object offset in paginated response","name":"offset","in":"query"}],"responses":{"200":{"description":"JSON-formatted metadata about all services reporting in the project"},"400":{"description":"One or more parameter(s) are not valid"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}}},"/{organization}/projects/{project}/snapshots":{"post":{"description":"Creates a new Snapshot for the provided query","produces":["application/json"],"tags":["Snapshots"],"summary":"Create Snapshot","operationId":"createSnapshot","parameters":[{"description":"Span query to create a snapshot for","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/snapshotCreate"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"The snapshot was created successfully"},"400":{"description":"Query parameters invalid"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"429":{"description":"Snapshot creation exceeded rate limit"}}}},"/{organization}/projects/{project}/stored-traces":{"get":{"description":"Returns complete traces that have already been assembled and stored. You must include a [span-id](https://docs.lightstep.com/docs/spans-in-opentelemetry) as a query parameter.","produces":["application/json"],"tags":["Traces"],"summary":"Stored Traces","operationId":"storedTracesID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the project that the trace belongs to","name":"project","in":"path","required":true},{"type":"string","description":"Key that uniquely identifies a stored trace","name":"span-id","in":"query","required":true}],"responses":{"200":{"description":"JSON representation of a stored trace"},"400":{"description":"Missing required parameter"},"404":{"description":"No stored traces found"}}}},"/{organization}/projects/{project}/streams":{"get":{"description":"Returns information about all streams in a project","produces":["application/json"],"tags":["Streams"],"summary":"List Streams","operationId":"listStreamsID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about all streams in the project"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}},"post":{"description":"Creates a new stream (or updates an existing stream if the query is identical). You do not need to include a clientID.","produces":["application/json"],"tags":["Streams"],"summary":"Create Stream","operationId":"postStreamID","parameters":[{"description":"Stream definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/createOrUpdateBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"The stream was created (or updated) successfully"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}}},"/{organization}/projects/{project}/streams/{stream-id}":{"get":{"description":"Returns information about a specific stream","produces":["application/json"],"tags":["Streams"],"summary":"Get Stream","operationId":"getStreamID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Stream identifier","name":"stream-id","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted data about the given stream"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"The stream identifier is not valid"}}},"delete":{"description":"Deletes an existing stream. Deleting a stream also deletes all historical data persisted for that stream and cannot be undone, so be sure you want to delete it.","produces":["application/json"],"tags":["Streams"],"summary":"Delete Stream","operationId":"deleteStreamID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the stream to delete","name":"stream-id","in":"path","required":true}],"responses":{"204":{"description":"Stream was successfully deleted"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}},"patch":{"description":"Modifies the settings for an existing stream, to provide more descriptive info about it. A clientID must be supplied. By default, streams are given the query parameters as the name and cannot be updated using the query field (results in a error).","produces":["application/json"],"tags":["Streams"],"summary":"Update Stream","operationId":"patchStreamID","parameters":[{"description":"Stream definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/createOrUpdateBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the stream to modify","name":"stream-id","in":"path","required":true}],"responses":{"200":{"description":"The stream was created (or updated) successfully"},"400":{"description":"One or more parameter(s) are not valid"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"Stream identifier not found"}}}},"/{organization}/projects/{project}/streams/{stream-id}/conditions":{"get":{"description":"Returns information about all conditions in a specific stream. You can create multiple conditions for a Stream. For example, you might create one condition for a \"warning\" threshold and another for a \"critical\" threshold. Or, you might want to have different thresholds for multiple percentiles (e.g., the 99th percentile can exceed 100ms, but your 50th percentile should never exceed 50ms).","produces":["application/json"],"tags":["Conditions"],"summary":"List Conditions for Stream","operationId":"listConditionsForStreamID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Stream identifier","name":"stream-id","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about all conditions in the given stream"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"The stream identifier is not valid"}}}},"/{organization}/projects/{project}/streams/{stream-id}/timeseries":{"get":{"description":"Returns timeseries data for a stream","produces":["application/json"],"tags":["Streams"],"summary":"Timeseries","operationId":"timeseriesID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the project that contains the stream","name":"project","in":"path","required":true},{"type":"string","description":"The ID of the stream to fetch timeseries data for","name":"stream-id","in":"path","required":true},{"type":"string","format":"date-time","description":"Beginning of the time range being queried, e.g., 2018-01-20T02:30:00-08:00","name":"oldest-time","in":"query","required":true},{"type":"string","format":"date-time","description":"End of the time range being queried, e.g., 2018-01-22T06:30:00-08:00","name":"youngest-time","in":"query","required":true},{"minimum":60000,"type":"integer","default":60000,"description":"Length of time represented by each \"point\" (time window) in the timeseries, in milliseconds. The minimum value (highest resolution data) for this parameter is 60000 (representing 1 minute of data per point). Larger values will result in latency distributions being merged.","name":"resolution-ms","in":"query","required":true},{"maximum":1,"minimum":0,"type":"integer","default":0,"description":"Boolean value that indicates whether the response should include example trace information for each time window. 0=false, 1=true","name":"include-exemplars","in":"query"},{"maximum":1,"minimum":0,"type":"integer","default":0,"description":"Indicates whether the response should specify the number of spans represented by each time window. 0=false, 1=true","name":"include-ops-counts","in":"query"},{"maximum":1,"minimum":0,"type":"integer","default":0,"description":"Indicates whether the response should specify the number of spans with errors in each time window. 0=false, 1=true","name":"include-error-counts","in":"query"},{"type":"array","items":{"type":"number"},"collectionFormat":"multi","description":"A (possibly) repeated field that indicates what latency percentiles to return for each time window, if any. Valid for values [0, 99.99].","name":"percentile","in":"query"}],"responses":{"200":{"description":"JSON representation of a timeseries"},"400":{"description":"One or more of the request parameter(s) is not valid"},"401":{"description":"The API Key does not provide access to this resource"},"404":{"description":"Project name is not found"},"500":{"description":"Stream ID is not valid, or other internal error"}}}},"/{organization}/projects/{project}/wf_links":{"get":{"description":"Returns information on all workflow link definitions within a project","produces":["application/json"],"tags":["WorkflowLinks"],"summary":"List Workflow Links","operationId":"listWorkflowLinksID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about all workflow link definitions in the project"},"401":{"description":"The API Key does not provide access to this resource"},"404":{"description":"Organization or project not found"}}},"post":{"description":"Creates a new workflow link. Links within a project must have a unique combination of Name and URL. Admin or Member privileges are required to create workflow links. Workflow name can also include [variables](https://docs.lightstep.com/docs/links-reference), allowing the link name to change dynamically based on the span being viewed.","produces":["application/json"],"tags":["WorkflowLinks"],"summary":"Create Workflow Link","operationId":"createWorkflowLinkID","parameters":[{"description":"Workflow Link definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/externalLinkRequestBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"The workflow link was created successfully"},"400":{"description":"Bad request - could not decode JSON request, or a parameter (name, URL, or Rules) is missing"},"401":{"description":"The API Key does not provide access to this resource"},"403":{"description":"Unsupported request to create resource - links within the same project cannot have the same name and URL."},"404":{"description":"Organization or project not found"}}}},"/{organization}/projects/{project}/wf_links/{link-id}":{"get":{"description":"Returns information on a specific workflow link definition within a project","produces":["application/json"],"tags":["WorkflowLinks"],"summary":"Get Workflow Link","operationId":"getWorkflowLinkID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Workflow Link identifier","name":"link-id","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about the workflow link"},"401":{"description":"The API Key does not provide access to this resource"},"404":{"description":"Organization, project name, or workflow link ID is not found"}}},"delete":{"description":"Deletes an existing workflow link","produces":["application/json"],"tags":["WorkflowLinks"],"summary":"Delete Workflow Link","operationId":"deleteWorkflowLinkID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the workflow link to delete","name":"link-id","in":"path","required":true}],"responses":{"204":{"description":"The workflow link was successfully deleted"},"401":{"description":"The API Key does not provide access to this resource"},"404":{"description":"Organization, project name, or workflow link ID is not found"}}},"patch":{"description":"Updates the workflow link with a new name or URL (if applicable), or replaces the set of rules on the workflow link. If a non-empty parameter (i.e., name, URL, or Rules) is provided, the field will be overwritten with the new value. Links within a project must have a unique combination of name and URL. Admin or Member privileges are required to update workflow links. Searches that are not supplied are removed from the workflow link.","produces":["application/json"],"tags":["WorkflowLinks"],"summary":"Update Workflow Link","operationId":"patchWorkflowLinkID","parameters":[{"description":"Workflow Link definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/externalLinkRequestBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the workflow link to modify","name":"link-id","in":"path","required":true}],"responses":{"200":{"description":"The workflow link was updated successfully"},"400":{"description":"Bad request - could not decode JSON request"},"401":{"description":"The API Key does not provide access to this resource"},"403":{"description":"Unsupported request to create resource - links within the same project cannot have the same name and URL."},"404":{"description":"Organization, project name, or workflow link ID is not found"}}}},"/{organization}/test":{"get":{"description":"A read-only endpoint for testing your authentication key","produces":["application/text"],"tags":["Test"],"summary":"Read Test","operationId":"testReadID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true}],"responses":{"200":{"description":"OK!"},"401":{"description":"Unauthorized"}}},"post":{"description":"A write endpoint for testing your authentication key","produces":["application/text"],"tags":["Test"],"summary":"Write Test","operationId":"testWriteID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true}],"responses":{"200":{"description":"OK!"},"401":{"description":"Unauthorized"}}}}},"definitions":{"Links":{"type":"object","additionalProperties":{"type":"object"},"x-go-package":"github.com/lightstep/crouton/service/api/jsonapi/v02"},"LinksObj":{"type":"object","properties":{"links":{"$ref":"#/definitions/Links"}},"x-go-package":"github.com/lightstep/crouton/service/api/jsonapi/v02"},"Micros":{"type":"integer","format":"int64","x-go-package":"github.com/lightstep/common-go/base"},"Name":{"type":"string","x-go-package":"github.com/lightstep/crouton/service/api/types"},"RelatedResourceObject":{"type":"object","required":["type","id"],"properties":{"id":{"description":"Unique identifier of the related resource","type":"string","x-go-name":"ID"},"type":{"description":"Valid values:\nStream resource: \"stream\"\nCondition resource: \"condition\"","type":"string","x-go-name":"Type"}},"x-go-package":"github.com/lightstep/crouton/service/api/jsonapi/v02"},"Rules":{"type":"object","additionalProperties":{"type":"array","items":{"type":"string"}},"x-go-package":"github.com/lightstep/crouton/service/api/types"},"URL":{"type":"string","x-go-package":"github.com/lightstep/crouton/service/api/types"},"conditionRequest":{"type":"object","required":["type"],"properties":{"attributes":{"$ref":"#/definitions/conditionRequestAttributes"},"id":{"description":"Unique identifier of the described resource.\nDo not populate this field for POST or PATCH requests; use path parameters instead.","type":"string","x-go-name":"ID"},"relationships":{"$ref":"#/definitions/conditionRequestRelationships"},"type":{"description":"Valid values:\nStream operations: \"stream\"\nCondition operations: \"condition\"","type":"string","x-go-name":"Type"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"conditionRequestAttributes":{"type":"object","properties":{"custom-data":{"type":"object","additionalProperties":{"type":"object"},"x-go-name":"CustomData"},"eval-window-ms":{"type":"integer","format":"int64","x-go-name":"EvaluationWindowMs"},"expression":{"type":"string","x-go-name":"Expression"},"name":{"type":"string","x-go-name":"Name"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"conditionRequestBody":{"type":"object","properties":{"data":{"$ref":"#/definitions/conditionRequest"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"conditionRequestRelationships":{"type":"object","properties":{"stream":{"$ref":"#/definitions/RelatedResourceObject"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"createAccessTokenAttributes":{"type":"object","properties":{"name":{"type":"string","x-go-name":"Name"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"createAccessTokenBody":{"type":"object","properties":{"data":{"$ref":"#/definitions/createAccessTokenRequest"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"createAccessTokenRequest":{"type":"object","properties":{"attributes":{"$ref":"#/definitions/createAccessTokenAttributes"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"createOrUpdateBody":{"type":"object","properties":{"data":{"$ref":"#/definitions/createOrUpdateRequest"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"createOrUpdateRequest":{"type":"object","required":["type","attributes"],"properties":{"attributes":{"$ref":"#/definitions/streamRequestAttributes"},"id":{"description":"Unique identifier of the described resource.\nDo not populate this field for POST or PATCH requests; use path parameters instead.","type":"string","x-go-name":"ID"},"type":{"description":"Valid values:\nStream operations: \"stream\"\nCondition operations: \"condition\"","type":"string","x-go-name":"Type"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"createProjectBody":{"type":"object","properties":{"data":{"$ref":"#/definitions/createProjectRequest"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"createProjectRequest":{"type":"object","required":["name"],"properties":{"name":{"type":"string","x-go-name":"Name"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"dashboardAttributes":{"type":"object","required":["name"],"properties":{"name":{"description":"Name for the dashboard (free-form string)","type":"string","x-go-name":"Name"},"streams":{"description":"Streams to be added to the dashboard. If the stream exists already, include the ID.\nIf it does not, do not include an ID. A new stream will be created","type":"array","items":{"$ref":"#/definitions/streamResponse"},"x-go-name":"Streams"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"dashboardRelationships":{"type":"object","properties":{"project":{"$ref":"#/definitions/LinksObj"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"dashboardRequest":{"type":"object","required":["type"],"properties":{"attributes":{"$ref":"#/definitions/dashboardAttributes"},"id":{"description":"Unique identifier of the described resource.\nDo not populate this field for POST or PATCH requests; use path parameters instead.","type":"string","x-go-name":"ID"},"relationships":{"$ref":"#/definitions/dashboardRelationships"},"type":{"description":"Valid values:\nStream operations: \"stream\"\nCondition operations: \"condition\"","type":"string","x-go-name":"Type"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"dashboardRequestBody":{"type":"object","properties":{"data":{"$ref":"#/definitions/dashboardRequest"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"destinationRequestBodyExample":{"type":"object","properties":{"data":{"type":"object","properties":{"attributes":{"type":"object","properties":{"channel":{"description":"Required parameter for Slack only","type":"string","x-go-name":"Channel"},"custom_headers":{"description":"Optional parameter for Webhook only","type":"object","additionalProperties":{"type":"string"},"x-go-name":"CustomHeaders"},"destination_type":{"description":"Required parameter. Can be one of: `\"slack\"`, `\"pagerduty\"`, and `\"webhook\"`.","type":"string","x-go-name":"DestinationType"},"integration_key":{"description":"Required parameter for PagerDuty only","type":"string","x-go-name":"IntegrationKey"},"name":{"description":"Required parameter","type":"string","x-go-name":"Name"},"url":{"description":"Required parameter for Webhook only","type":"string","x-go-name":"URL"}},"x-go-name":"Attributes"},"type":{"description":"`Type` should be `\"destination\"`","type":"string","x-go-name":"Type"}},"x-go-name":"Data"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"externalLinkAttributes":{"type":"object","properties":{"created_by":{"type":"string","x-go-name":"CreatedBy"},"last_clicked_micros":{"$ref":"#/definitions/Micros"},"last_edited_micros":{"$ref":"#/definitions/Micros"},"name":{"$ref":"#/definitions/Name"},"rules":{"$ref":"#/definitions/Rules"},"url":{"$ref":"#/definitions/URL"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"externalLinkRelationships":{"type":"object","properties":{"project":{"$ref":"#/definitions/LinksObj"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"externalLinkRequest":{"type":"object","required":["type"],"properties":{"attributes":{"$ref":"#/definitions/externalLinkAttributes"},"id":{"description":"Unique identifier of the described resource.\nDo not populate this field for POST or PATCH requests; use path parameters instead.","type":"string","x-go-name":"ID"},"relationships":{"$ref":"#/definitions/externalLinkRelationships"},"type":{"description":"Valid values:\nStream operations: \"stream\"\nCondition operations: \"condition\"","type":"string","x-go-name":"Type"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"externalLinkRequestBody":{"type":"object","properties":{"data":{"$ref":"#/definitions/externalLinkRequest"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"snapshotCreate":{"type":"object","properties":{"data":{"type":"object","properties":{"attributes":{"type":"object","required":["query"],"properties":{"query":{"description":"The query string itself (see Query Syntax section for details).","type":"string","x-go-name":"Query"}},"x-go-name":"Attributes"}},"x-go-name":"Data"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"streamAttributes":{"type":"object","required":["name"],"properties":{"created-by":{"description":"User who created stream","type":"string","x-go-name":"CreatedBy"},"created-time":{"description":"Date+time stream was created","type":"string","format":"date-time","x-go-name":"CreatedTime"},"custom-data":{"description":"Custom JSON data that can be set by an end user and will be included in notifications.","type":"object","additionalProperties":{"type":"object"},"x-go-name":"CustomData"},"data-last-received-time":{"description":"Date+time stream was last updated","type":"string","format":"date-time","x-go-name":"DataLastReceivedTime"},"name":{"description":"Name for the stream (free-form string)","type":"string","x-go-name":"Name"},"query":{"description":"The query string itself (see Query Syntax section for details).\nOnce a stream has been created, this string cannot be modified.\n<b>Required when creating new streams.</b>","type":"string","x-go-name":"Query"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"streamRelationships":{"type":"object","properties":{"conditions":{"$ref":"#/definitions/LinksObj"},"project":{"$ref":"#/definitions/LinksObj"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"streamRequestAttributes":{"type":"object","required":["name"],"properties":{"custom_data":{"description":"Custom JSON data that can be set by an end user and will be included in notifications.","type":"object","additionalProperties":{"type":"object"},"x-go-name":"CustomData"},"name":{"description":"Name for the stream (free-form string)","type":"string","x-go-name":"Name"},"query":{"description":"The query string itself (see Query Syntax section for details).\nOnce a stream has been created, this string cannot be modified.\n<b>Required when creating new streams.</b>","type":"string","x-go-name":"Query"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"streamResponse":{"type":"object","required":["type"],"properties":{"attributes":{"$ref":"#/definitions/streamAttributes"},"id":{"description":"Unique identifier of the described resource.\nDo not populate this field for POST or PATCH requests; use path parameters instead.","type":"string","x-go-name":"ID"},"links":{"$ref":"#/definitions/Links"},"relationships":{"$ref":"#/definitions/streamRelationships"},"type":{"description":"Valid values:\nStream operations: \"stream\"\nCondition operations: \"condition\"","type":"string","x-go-name":"Type"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"}},"securityDefinitions":{"api_key":{"type":"apiKey","name":"Authorization","in":"header"}},"security":[{"api_key":[]}]};
-
-/***/ }),
-/* 733 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-var __assign = (this && this.__assign) || function () {
-    __assign = Object.assign || function(t) {
-        for (var s, i = 1, n = arguments.length; i < n; i++) {
-            s = arguments[i];
-            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
-                t[p] = s[p];
-        }
-        return t;
-    };
-    return __assign.apply(this, arguments);
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-/*!
- * https://github.com/Starcounter-Jack/JSON-Patch
- * (c) 2017 Joachim Wester
- * MIT license
- */
-var helpers_1 = __webpack_require__(258);
-var core_1 = __webpack_require__(150);
-/* export all core functions and types */
-var core_2 = __webpack_require__(150);
-exports.applyOperation = core_2.applyOperation;
-exports.applyPatch = core_2.applyPatch;
-exports.applyReducer = core_2.applyReducer;
-exports.getValueByPointer = core_2.getValueByPointer;
-exports.validate = core_2.validate;
-exports.validator = core_2.validator;
-/* export some helpers */
-var helpers_2 = __webpack_require__(258);
-exports.JsonPatchError = helpers_2.PatchError;
-exports.deepClone = helpers_2._deepClone;
-exports.escapePathComponent = helpers_2.escapePathComponent;
-exports.unescapePathComponent = helpers_2.unescapePathComponent;
-var beforeDict = new WeakMap();
-var Mirror = /** @class */ (function () {
-    function Mirror(obj) {
-        this.observers = new Map();
-        this.obj = obj;
-    }
-    return Mirror;
-}());
-var ObserverInfo = /** @class */ (function () {
-    function ObserverInfo(callback, observer) {
-        this.callback = callback;
-        this.observer = observer;
-    }
-    return ObserverInfo;
-}());
-function getMirror(obj) {
-    return beforeDict.get(obj);
-}
-function getObserverFromMirror(mirror, callback) {
-    return mirror.observers.get(callback);
-}
-function removeObserverFromMirror(mirror, observer) {
-    mirror.observers.delete(observer.callback);
-}
-/**
- * Detach an observer from an object
- */
-function unobserve(root, observer) {
-    observer.unobserve();
-}
-exports.unobserve = unobserve;
-/**
- * Observes changes made to an object, which can then be retrieved using generate
- */
-function observe(obj, callback) {
-    var patches = [];
-    var observer;
-    var mirror = getMirror(obj);
-    if (!mirror) {
-        mirror = new Mirror(obj);
-        beforeDict.set(obj, mirror);
-    }
-    else {
-        var observerInfo = getObserverFromMirror(mirror, callback);
-        observer = observerInfo && observerInfo.observer;
-    }
-    if (observer) {
-        return observer;
-    }
-    observer = {};
-    mirror.value = helpers_1._deepClone(obj);
-    if (callback) {
-        observer.callback = callback;
-        observer.next = null;
-        var dirtyCheck = function () {
-            generate(observer);
-        };
-        var fastCheck = function () {
-            clearTimeout(observer.next);
-            observer.next = setTimeout(dirtyCheck);
-        };
-        if (typeof window !== 'undefined') { //not Node
-            window.addEventListener('mouseup', fastCheck);
-            window.addEventListener('keyup', fastCheck);
-            window.addEventListener('mousedown', fastCheck);
-            window.addEventListener('keydown', fastCheck);
-            window.addEventListener('change', fastCheck);
-        }
-    }
-    observer.patches = patches;
-    observer.object = obj;
-    observer.unobserve = function () {
-        generate(observer);
-        clearTimeout(observer.next);
-        removeObserverFromMirror(mirror, observer);
-        if (typeof window !== 'undefined') {
-            window.removeEventListener('mouseup', fastCheck);
-            window.removeEventListener('keyup', fastCheck);
-            window.removeEventListener('mousedown', fastCheck);
-            window.removeEventListener('keydown', fastCheck);
-            window.removeEventListener('change', fastCheck);
-        }
-    };
-    mirror.observers.set(callback, new ObserverInfo(callback, observer));
-    return observer;
-}
-exports.observe = observe;
-/**
- * Generate an array of patches from an observer
- */
-function generate(observer, invertible) {
-    if (invertible === void 0) { invertible = false; }
-    var mirror = beforeDict.get(observer.object);
-    _generate(mirror.value, observer.object, observer.patches, "", invertible);
-    if (observer.patches.length) {
-        core_1.applyPatch(mirror.value, observer.patches);
-    }
-    var temp = observer.patches;
-    if (temp.length > 0) {
-        observer.patches = [];
-        if (observer.callback) {
-            observer.callback(temp);
-        }
-    }
-    return temp;
-}
-exports.generate = generate;
-// Dirty check if obj is different from mirror, generate patches and update mirror
-function _generate(mirror, obj, patches, path, invertible) {
-    if (obj === mirror) {
-        return;
-    }
-    if (typeof obj.toJSON === "function") {
-        obj = obj.toJSON();
-    }
-    var newKeys = helpers_1._objectKeys(obj);
-    var oldKeys = helpers_1._objectKeys(mirror);
-    var changed = false;
-    var deleted = false;
-    //if ever "move" operation is implemented here, make sure this test runs OK: "should not generate the same patch twice (move)"
-    for (var t = oldKeys.length - 1; t >= 0; t--) {
-        var key = oldKeys[t];
-        var oldVal = mirror[key];
-        if (helpers_1.hasOwnProperty(obj, key) && !(obj[key] === undefined && oldVal !== undefined && Array.isArray(obj) === false)) {
-            var newVal = obj[key];
-            if (typeof oldVal == "object" && oldVal != null && typeof newVal == "object" && newVal != null) {
-                _generate(oldVal, newVal, patches, path + "/" + helpers_1.escapePathComponent(key), invertible);
-            }
-            else {
-                if (oldVal !== newVal) {
-                    changed = true;
-                    if (invertible) {
-                        patches.push({ op: "test", path: path + "/" + helpers_1.escapePathComponent(key), value: helpers_1._deepClone(oldVal) });
-                    }
-                    patches.push({ op: "replace", path: path + "/" + helpers_1.escapePathComponent(key), value: helpers_1._deepClone(newVal) });
-                }
-            }
-        }
-        else if (Array.isArray(mirror) === Array.isArray(obj)) {
-            if (invertible) {
-                patches.push({ op: "test", path: path + "/" + helpers_1.escapePathComponent(key), value: helpers_1._deepClone(oldVal) });
-            }
-            patches.push({ op: "remove", path: path + "/" + helpers_1.escapePathComponent(key) });
-            deleted = true; // property has been deleted
-        }
-        else {
-            if (invertible) {
-                patches.push({ op: "test", path: path, value: mirror });
-            }
-            patches.push({ op: "replace", path: path, value: obj });
-            changed = true;
-        }
-    }
-    if (!deleted && newKeys.length == oldKeys.length) {
-        return;
-    }
-    for (var t = 0; t < newKeys.length; t++) {
-        var key = newKeys[t];
-        if (!helpers_1.hasOwnProperty(mirror, key) && obj[key] !== undefined) {
-            patches.push({ op: "add", path: path + "/" + helpers_1.escapePathComponent(key), value: helpers_1._deepClone(obj[key]) });
-        }
-    }
-}
-/**
- * Create an array of patches from the differences in two objects
- */
-function compare(tree1, tree2, invertible) {
-    if (invertible === void 0) { invertible = false; }
-    var patches = [];
-    _generate(tree1, tree2, patches, '', invertible);
-    return patches;
-}
-exports.compare = compare;
-/**
- * Default export for backwards compat
- */
-// import just to re-export as default
-var core = __webpack_require__(150);
-var helpers_3 = __webpack_require__(258);
-exports.default = __assign({}, core, { 
-    // duplex
-    unobserve: unobserve,
-    observe: observe,
-    generate: generate,
-    compare: compare,
-    // helpers
-    JsonPatchError: helpers_3.PatchError, deepClone: helpers_1._deepClone, escapePathComponent: helpers_1.escapePathComponent,
-    unescapePathComponent: helpers_3.unescapePathComponent });
-
-
-/***/ }),
-/* 734 */,
-/* 735 */,
-/* 736 */,
-/* 737 */,
-/* 738 */,
-/* 739 */,
-/* 740 */
-/***/ (function(module) {
-
-"use strict";
-
-
-
-function isNothing(subject) {
-  return (typeof subject === 'undefined') || (subject === null);
-}
-
-
-function isObject(subject) {
-  return (typeof subject === 'object') && (subject !== null);
-}
-
-
-function toArray(sequence) {
-  if (Array.isArray(sequence)) return sequence;
-  else if (isNothing(sequence)) return [];
-
-  return [ sequence ];
-}
-
-
-function extend(target, source) {
-  var index, length, key, sourceKeys;
-
-  if (source) {
-    sourceKeys = Object.keys(source);
-
-    for (index = 0, length = sourceKeys.length; index < length; index += 1) {
-      key = sourceKeys[index];
-      target[key] = source[key];
-    }
-  }
-
-  return target;
-}
-
-
-function repeat(string, count) {
-  var result = '', cycle;
-
-  for (cycle = 0; cycle < count; cycle += 1) {
-    result += string;
-  }
-
-  return result;
-}
-
-
-function isNegativeZero(number) {
-  return (number === 0) && (Number.NEGATIVE_INFINITY === 1 / number);
-}
-
-
-module.exports.isNothing      = isNothing;
-module.exports.isObject       = isObject;
-module.exports.toArray        = toArray;
-module.exports.repeat         = repeat;
-module.exports.isNegativeZero = isNegativeZero;
-module.exports.extend         = extend;
-
-
-/***/ }),
-/* 741 */,
-/* 742 */,
-/* 743 */,
-/* 744 */
-/***/ (function(module, exports, __webpack_require__) {
-
-/* module decorator */ module = __webpack_require__.nmd(module);
-var root = __webpack_require__(824);
-
-/** Detect free variable `exports`. */
-var freeExports =  true && exports && !exports.nodeType && exports;
-
-/** Detect free variable `module`. */
-var freeModule = freeExports && "object" == 'object' && module && !module.nodeType && module;
-
-/** Detect the popular CommonJS extension `module.exports`. */
-var moduleExports = freeModule && freeModule.exports === freeExports;
-
-/** Built-in value references. */
-var Buffer = moduleExports ? root.Buffer : undefined,
-    allocUnsafe = Buffer ? Buffer.allocUnsafe : undefined;
-
-/**
- * Creates a clone of  `buffer`.
- *
- * @private
- * @param {Buffer} buffer The buffer to clone.
- * @param {boolean} [isDeep] Specify a deep clone.
- * @returns {Buffer} Returns the cloned buffer.
- */
-function cloneBuffer(buffer, isDeep) {
-  if (isDeep) {
-    return buffer.slice();
-  }
-  var length = buffer.length,
-      result = allocUnsafe ? allocUnsafe(length) : new buffer.constructor(length);
-
-  buffer.copy(result);
-  return result;
-}
-
-module.exports = cloneBuffer;
-
-
-/***/ }),
-/* 745 */,
-/* 746 */,
-/* 747 */
-/***/ (function(module) {
-
-module.exports = require("fs");
-
-/***/ }),
-/* 748 */,
-/* 749 */,
-/* 750 */,
-/* 751 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var defer = __webpack_require__(500);
-
-// API
-module.exports = async;
-
-/**
- * Runs provided callback asynchronously
- * even if callback itself is not
- *
- * @param   {function} callback - callback to invoke
- * @returns {function} - augmented callback
- */
-function async(callback)
-{
-  var isAsync = false;
-
-  // check if async happened
-  defer(function() { isAsync = true; });
-
-  return function async_callback(err, result)
-  {
-    if (isAsync)
-    {
-      callback(err, result);
-    }
-    else
-    {
-      defer(function nextTick_callback()
-      {
-        callback(err, result);
-      });
-    }
-  };
-}
-
-
-/***/ }),
-/* 752 */,
-/* 753 */,
-/* 754 */
-/***/ (function(module) {
-
-/**
- * The base implementation of `_.hasIn` without support for deep paths.
- *
- * @private
- * @param {Object} [object] The object to query.
- * @param {Array|string} key The key to check.
- * @returns {boolean} Returns `true` if `key` exists, else `false`.
- */
-function baseHasIn(object, key) {
-  return object != null && key in Object(object);
-}
-
-module.exports = baseHasIn;
-
-
-/***/ }),
-/* 755 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var assocIndexOf = __webpack_require__(820);
-
-/**
- * Gets the list cache value for `key`.
- *
- * @private
- * @name get
- * @memberOf ListCache
- * @param {string} key The key of the value to get.
- * @returns {*} Returns the entry value.
- */
-function listCacheGet(key) {
-  var data = this.__data__,
-      index = assocIndexOf(data, key);
-
-  return index < 0 ? undefined : data[index][1];
-}
-
-module.exports = listCacheGet;
-
-
-/***/ }),
-/* 756 */,
-/* 757 */,
-/* 758 */,
-/* 759 */,
-/* 760 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var copyObject = __webpack_require__(875),
-    getSymbols = __webpack_require__(667);
-
-/**
- * Copies own symbols of `source` to `object`.
- *
- * @private
- * @param {Object} source The object to copy symbols from.
- * @param {Object} [object={}] The object to copy symbols to.
- * @returns {Object} Returns `object`.
- */
-function copySymbols(source, object) {
-  return copyObject(source, getSymbols(source), object);
-}
-
-module.exports = copySymbols;
-
-
-/***/ }),
-/* 761 */
-/***/ (function(module) {
-
-module.exports = require("zlib");
-
-/***/ }),
-/* 762 */,
-/* 763 */,
-/* 764 */,
-/* 765 */,
-/* 766 */
-/***/ (function(module) {
-
-"use strict";
-
-
-var isArray = Array.isArray;
-var keyList = Object.keys;
-var hasProp = Object.prototype.hasOwnProperty;
-
-module.exports = function equal(a, b) {
-  if (a === b) return true;
-
-  if (a && b && typeof a == 'object' && typeof b == 'object') {
-    var arrA = isArray(a)
-      , arrB = isArray(b)
-      , i
-      , length
-      , key;
-
-    if (arrA && arrB) {
-      length = a.length;
-      if (length != b.length) return false;
-      for (i = length; i-- !== 0;)
-        if (!equal(a[i], b[i])) return false;
-      return true;
-    }
-
-    if (arrA != arrB) return false;
-
-    var dateA = a instanceof Date
-      , dateB = b instanceof Date;
-    if (dateA != dateB) return false;
-    if (dateA && dateB) return a.getTime() == b.getTime();
-
-    var regexpA = a instanceof RegExp
-      , regexpB = b instanceof RegExp;
-    if (regexpA != regexpB) return false;
-    if (regexpA && regexpB) return a.toString() == b.toString();
-
-    var keys = keyList(a);
-    length = keys.length;
-
-    if (length !== keyList(b).length)
-      return false;
-
-    for (i = length; i-- !== 0;)
-      if (!hasProp.call(b, keys[i])) return false;
-
-    for (i = length; i-- !== 0;) {
-      key = keys[i];
-      if (!equal(a[key], b[key])) return false;
-    }
-
-    return true;
-  }
-
-  return a!==a && b!==b;
-};
-
-
-/***/ }),
-/* 767 */,
-/* 768 */,
-/* 769 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var baseClone = __webpack_require__(377);
-
-/** Used to compose bitmasks for cloning. */
-var CLONE_DEEP_FLAG = 1,
-    CLONE_SYMBOLS_FLAG = 4;
-
-/**
- * This method is like `_.clone` except that it recursively clones `value`.
- *
- * @static
- * @memberOf _
- * @since 1.0.0
- * @category Lang
- * @param {*} value The value to recursively clone.
- * @returns {*} Returns the deep cloned value.
- * @see _.clone
- * @example
- *
- * var objects = [{ 'a': 1 }, { 'b': 2 }];
- *
- * var deep = _.cloneDeep(objects);
- * console.log(deep[0] === objects[0]);
- * // => false
- */
-function cloneDeep(value) {
-  return baseClone(value, CLONE_DEEP_FLAG | CLONE_SYMBOLS_FLAG);
-}
-
-module.exports = cloneDeep;
-
-
-/***/ }),
-/* 770 */,
-/* 771 */,
-/* 772 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var defineProperty = __webpack_require__(382);
-
-/**
- * The base implementation of `assignValue` and `assignMergeValue` without
- * value checks.
- *
- * @private
- * @param {Object} object The object to modify.
- * @param {string} key The key of the property to assign.
- * @param {*} value The value to assign.
- */
-function baseAssignValue(object, key, value) {
-  if (key == '__proto__' && defineProperty) {
-    defineProperty(object, key, {
-      'configurable': true,
-      'enumerable': true,
-      'value': value,
-      'writable': true
-    });
-  } else {
-    object[key] = value;
-  }
-}
-
-module.exports = baseAssignValue;
-
-
-/***/ }),
-/* 773 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var overArg = __webpack_require__(393);
-
-/* Built-in method references for those with the same name as other `lodash` methods. */
-var nativeKeys = overArg(Object.keys, Object);
-
-module.exports = nativeKeys;
-
-
-/***/ }),
-/* 774 */,
-/* 775 */,
-/* 776 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var assocIndexOf = __webpack_require__(820);
-
-/** Used for built-in method references. */
-var arrayProto = Array.prototype;
-
-/** Built-in value references. */
-var splice = arrayProto.splice;
-
-/**
- * Removes `key` and its value from the list cache.
- *
- * @private
- * @name delete
- * @memberOf ListCache
- * @param {string} key The key of the value to remove.
- * @returns {boolean} Returns `true` if the entry was removed, else `false`.
- */
-function listCacheDelete(key) {
-  var data = this.__data__,
-      index = assocIndexOf(data, key);
-
-  if (index < 0) {
-    return false;
-  }
-  var lastIndex = data.length - 1;
-  if (index == lastIndex) {
-    data.pop();
-  } else {
-    splice.call(data, index, 1);
-  }
-  --this.size;
-  return true;
-}
-
-module.exports = listCacheDelete;
-
-
-/***/ }),
-/* 777 */,
-/* 778 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var arrayPush = __webpack_require__(883),
-    getPrototype = __webpack_require__(931),
-    getSymbols = __webpack_require__(667),
-    stubArray = __webpack_require__(130);
-
-/* Built-in method references for those with the same name as other `lodash` methods. */
-var nativeGetSymbols = Object.getOwnPropertySymbols;
-
-/**
- * Creates an array of the own and inherited enumerable symbols of `object`.
- *
- * @private
- * @param {Object} object The object to query.
- * @returns {Array} Returns the array of symbols.
- */
-var getSymbolsIn = !nativeGetSymbols ? stubArray : function(object) {
-  var result = [];
-  while (object) {
-    arrayPush(result, getSymbols(object));
-    object = getPrototype(object);
-  }
-  return result;
-};
-
-module.exports = getSymbolsIn;
-
-
-/***/ }),
-/* 779 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-/*!
- * mime-types
- * Copyright(c) 2014 Jonathan Ong
- * Copyright(c) 2015 Douglas Christopher Wilson
- * MIT Licensed
- */
-
-
-
-/**
- * Module dependencies.
- * @private
- */
-
-var db = __webpack_require__(852)
-var extname = __webpack_require__(622).extname
-
-/**
- * Module variables.
- * @private
- */
-
-var EXTRACT_TYPE_REGEXP = /^\s*([^;\s]*)(?:;|\s|$)/
-var TEXT_TYPE_REGEXP = /^text\//i
-
-/**
- * Module exports.
- * @public
- */
-
-exports.charset = charset
-exports.charsets = { lookup: charset }
-exports.contentType = contentType
-exports.extension = extension
-exports.extensions = Object.create(null)
-exports.lookup = lookup
-exports.types = Object.create(null)
-
-// Populate the extensions/types maps
-populateMaps(exports.extensions, exports.types)
-
-/**
- * Get the default charset for a MIME type.
- *
- * @param {string} type
- * @return {boolean|string}
- */
-
-function charset (type) {
-  if (!type || typeof type !== 'string') {
-    return false
-  }
-
-  // TODO: use media-typer
-  var match = EXTRACT_TYPE_REGEXP.exec(type)
-  var mime = match && db[match[1].toLowerCase()]
-
-  if (mime && mime.charset) {
-    return mime.charset
-  }
-
-  // default text/* to utf-8
-  if (match && TEXT_TYPE_REGEXP.test(match[1])) {
-    return 'UTF-8'
-  }
-
-  return false
-}
-
-/**
- * Create a full Content-Type header given a MIME type or extension.
- *
- * @param {string} str
- * @return {boolean|string}
- */
-
-function contentType (str) {
-  // TODO: should this even be in this module?
-  if (!str || typeof str !== 'string') {
-    return false
-  }
-
-  var mime = str.indexOf('/') === -1
-    ? exports.lookup(str)
-    : str
-
-  if (!mime) {
-    return false
-  }
-
-  // TODO: use content-type or other module
-  if (mime.indexOf('charset') === -1) {
-    var charset = exports.charset(mime)
-    if (charset) mime += '; charset=' + charset.toLowerCase()
-  }
-
-  return mime
-}
-
-/**
- * Get the default extension for a MIME type.
- *
- * @param {string} type
- * @return {boolean|string}
- */
-
-function extension (type) {
-  if (!type || typeof type !== 'string') {
-    return false
-  }
-
-  // TODO: use media-typer
-  var match = EXTRACT_TYPE_REGEXP.exec(type)
-
-  // get extensions
-  var exts = match && exports.extensions[match[1].toLowerCase()]
-
-  if (!exts || !exts.length) {
-    return false
-  }
-
-  return exts[0]
-}
-
-/**
- * Lookup the MIME type for a file path/extension.
- *
- * @param {string} path
- * @return {boolean|string}
- */
-
-function lookup (path) {
-  if (!path || typeof path !== 'string') {
-    return false
-  }
-
-  // get the extension ("ext" or ".ext" or full path)
-  var extension = extname('x.' + path)
-    .toLowerCase()
-    .substr(1)
-
-  if (!extension) {
-    return false
-  }
-
-  return exports.types[extension] || false
-}
-
-/**
- * Populate the extensions and types maps.
- * @private
- */
-
-function populateMaps (extensions, types) {
-  // source preference (least -> most)
-  var preference = ['nginx', 'apache', undefined, 'iana']
-
-  Object.keys(db).forEach(function forEachMimeType (type) {
-    var mime = db[type]
-    var exts = mime.extensions
-
-    if (!exts || !exts.length) {
-      return
-    }
-
-    // mime -> extensions
-    extensions[type] = exts
-
-    // extension -> mime
-    for (var i = 0; i < exts.length; i++) {
-      var extension = exts[i]
-
-      if (types[extension]) {
-        var from = preference.indexOf(db[types[extension]].source)
-        var to = preference.indexOf(mime.source)
-
-        if (types[extension] !== 'application/octet-stream' &&
-          (from > to || (from === to && types[extension].substr(0, 12) === 'application/'))) {
-          // skip the remapping
-          continue
-        }
-      }
-
-      // set the extension -> mime
-      types[extension] = type
-    }
-  })
-}
-
-
-/***/ }),
-/* 780 */,
-/* 781 */,
-/* 782 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var isObject = __webpack_require__(323);
-
-/** Built-in value references. */
-var objectCreate = Object.create;
-
-/**
- * The base implementation of `_.create` without support for assigning
- * properties to the created object.
- *
- * @private
- * @param {Object} proto The object to inherit from.
- * @returns {Object} Returns the new object.
- */
-var baseCreate = (function() {
-  function object() {}
-  return function(proto) {
-    if (!isObject(proto)) {
-      return {};
-    }
-    if (objectCreate) {
-      return objectCreate(proto);
-    }
-    object.prototype = proto;
-    var result = new object;
-    object.prototype = undefined;
-    return result;
-  };
-}());
-
-module.exports = baseCreate;
-
-
-/***/ }),
-/* 783 */,
-/* 784 */,
-/* 785 */,
-/* 786 */,
-/* 787 */,
-/* 788 */
-/***/ (function(module) {
-
-module.exports = {"name":"lightstep-js-sdk","version":"0.0.3","description":"Javascript SDK for the public Lighstep API","main":"src/index.js","dependencies":{"node-fetch":"^2.6.1","swagger-client":"^3.10.12"},"devDependencies":{"eslint":"^7.5.0","jest":"^26.1.0"},"scripts":{"test":"./node_modules/.bin/jest","e2e":"./node_modules/.bin/jest --testRegex='./e2e/e2e.js'","lint":"eslint src"},"repository":{"type":"git","url":"git+https://github.com/lightstep/lightstep-js-sdk.git"},"author":"Lighstep, Inc.","license":"ISC","bugs":{"url":"https://github.com/lightstep/lightstep-js-sdk/issues"},"homepage":"https://github.com/lightstep/lightstep-js-sdk#readme","_resolved":"","_integrity":"","_from":"lightstep-js-sdk@git://github.com/lightstep/lightstep-js-sdk.git"};
-
-/***/ }),
-/* 789 */,
-/* 790 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var isObject = __webpack_require__(323),
-    isSymbol = __webpack_require__(186);
-
-/** Used as references for various `Number` constants. */
-var NAN = 0 / 0;
-
-/** Used to match leading and trailing whitespace. */
-var reTrim = /^\s+|\s+$/g;
-
-/** Used to detect bad signed hexadecimal string values. */
-var reIsBadHex = /^[-+]0x[0-9a-f]+$/i;
-
-/** Used to detect binary string values. */
-var reIsBinary = /^0b[01]+$/i;
-
-/** Used to detect octal string values. */
-var reIsOctal = /^0o[0-7]+$/i;
-
-/** Built-in method references without a dependency on `root`. */
-var freeParseInt = parseInt;
-
-/**
- * Converts `value` to a number.
- *
- * @static
- * @memberOf _
- * @since 4.0.0
- * @category Lang
- * @param {*} value The value to process.
- * @returns {number} Returns the number.
- * @example
- *
- * _.toNumber(3.2);
- * // => 3.2
- *
- * _.toNumber(Number.MIN_VALUE);
- * // => 5e-324
- *
- * _.toNumber(Infinity);
- * // => Infinity
- *
- * _.toNumber('3.2');
- * // => 3.2
- */
-function toNumber(value) {
-  if (typeof value == 'number') {
-    return value;
-  }
-  if (isSymbol(value)) {
-    return NAN;
-  }
-  if (isObject(value)) {
-    var other = typeof value.valueOf == 'function' ? value.valueOf() : value;
-    value = isObject(other) ? (other + '') : other;
-  }
-  if (typeof value != 'string') {
-    return value === 0 ? value : +value;
-  }
-  value = value.replace(reTrim, '');
-  var isBinary = reIsBinary.test(value);
-  return (isBinary || reIsOctal.test(value))
-    ? freeParseInt(value.slice(2), isBinary ? 2 : 8)
-    : (reIsBadHex.test(value) ? NAN : +value);
-}
-
-module.exports = toNumber;
-
-
-/***/ }),
-/* 791 */,
-/* 792 */,
-/* 793 */,
-/* 794 */
-/***/ (function(module) {
-
-// API
-module.exports = state;
-
-/**
- * Creates initial state object
- * for iteration over list
- *
- * @param   {array|object} list - list to iterate over
- * @param   {function|null} sortMethod - function to use for keys sort,
- *                                     or `null` to keep them as is
- * @returns {object} - initial state object
- */
-function state(list, sortMethod)
-{
-  var isNamedList = !Array.isArray(list)
-    , initState =
-    {
-      index    : 0,
-      keyedList: isNamedList || sortMethod ? Object.keys(list) : null,
-      jobs     : {},
-      results  : isNamedList ? {} : [],
-      size     : isNamedList ? Object.keys(list).length : list.length
-    }
-    ;
-
-  if (sortMethod)
-  {
-    // sort array keys based on it's values
-    // sort object's keys just on own merit
-    initState.keyedList.sort(isNamedList ? sortMethod : function(a, b)
-    {
-      return sortMethod(list[a], list[b]);
-    });
-  }
-
-  return initState;
-}
-
-
-/***/ }),
-/* 795 */,
-/* 796 */,
-/* 797 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var baseRest = __webpack_require__(407),
-    isIterateeCall = __webpack_require__(663);
-
-/**
- * Creates a function like `_.assign`.
- *
- * @private
- * @param {Function} assigner The function to assign values.
- * @returns {Function} Returns the new assigner function.
- */
-function createAssigner(assigner) {
-  return baseRest(function(object, sources) {
-    var index = -1,
-        length = sources.length,
-        customizer = length > 1 ? sources[length - 1] : undefined,
-        guard = length > 2 ? sources[2] : undefined;
-
-    customizer = (assigner.length > 3 && typeof customizer == 'function')
-      ? (length--, customizer)
-      : undefined;
-
-    if (guard && isIterateeCall(sources[0], sources[1], guard)) {
-      customizer = length < 3 ? undefined : customizer;
-      length = 1;
-    }
-    object = Object(object);
-    while (++index < length) {
-      var source = sources[index];
-      if (source) {
-        assigner(object, source, index, customizer);
-      }
-    }
-    return object;
-  });
-}
-
-module.exports = createAssigner;
-
-
-/***/ }),
-/* 798 */,
-/* 799 */,
-/* 800 */,
-/* 801 */,
-/* 802 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var nativeCreate = __webpack_require__(878);
-
-/** Used for built-in method references. */
-var objectProto = Object.prototype;
-
-/** Used to check objects for own properties. */
-var hasOwnProperty = objectProto.hasOwnProperty;
-
-/**
- * Checks if a hash value for `key` exists.
- *
- * @private
- * @name has
- * @memberOf Hash
- * @param {string} key The key of the entry to check.
- * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
- */
-function hashHas(key) {
-  var data = this.__data__;
-  return nativeCreate ? (data[key] !== undefined) : hasOwnProperty.call(data, key);
-}
-
-module.exports = hashHas;
-
-
-/***/ }),
-/* 803 */,
-/* 804 */,
-/* 805 */,
-/* 806 */,
-/* 807 */,
-/* 808 */,
-/* 809 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-"use strict";
-
-
-var Type = __webpack_require__(945);
-
-function resolveYamlNull(data) {
-  if (data === null) return true;
-
-  var max = data.length;
-
-  return (max === 1 && data === '~') ||
-         (max === 4 && (data === 'null' || data === 'Null' || data === 'NULL'));
-}
-
-function constructYamlNull() {
-  return null;
-}
-
-function isNull(object) {
-  return object === null;
-}
-
-module.exports = new Type('tag:yaml.org,2002:null', {
-  kind: 'scalar',
-  resolve: resolveYamlNull,
-  construct: constructYamlNull,
-  predicate: isNull,
-  represent: {
-    canonical: function () { return '~';    },
-    lowercase: function () { return 'null'; },
-    uppercase: function () { return 'NULL'; },
-    camelcase: function () { return 'Null'; }
-  },
-  defaultStyle: 'lowercase'
-});
-
-
-/***/ }),
-/* 810 */,
-/* 811 */,
-/* 812 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var Hash = __webpack_require__(710),
-    ListCache = __webpack_require__(670),
-    Map = __webpack_require__(654);
-
-/**
- * Removes all key-value entries from the map.
- *
- * @private
- * @name clear
- * @memberOf MapCache
- */
-function mapCacheClear() {
-  this.size = 0;
-  this.__data__ = {
-    'hash': new Hash,
-    'map': new (Map || ListCache),
-    'string': new Hash
-  };
-}
-
-module.exports = mapCacheClear;
-
-
-/***/ }),
-/* 813 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var toFinite = __webpack_require__(933);
-
-/**
- * Converts `value` to an integer.
- *
- * **Note:** This method is loosely based on
- * [`ToInteger`](http://www.ecma-international.org/ecma-262/7.0/#sec-tointeger).
- *
- * @static
- * @memberOf _
- * @since 4.0.0
- * @category Lang
- * @param {*} value The value to convert.
- * @returns {number} Returns the converted integer.
- * @example
- *
- * _.toInteger(3.2);
- * // => 3
- *
- * _.toInteger(Number.MIN_VALUE);
- * // => 0
- *
- * _.toInteger(Infinity);
- * // => 1.7976931348623157e+308
- *
- * _.toInteger('3.2');
- * // => 3
- */
-function toInteger(value) {
-  var result = toFinite(value),
-      remainder = result % 1;
-
-  return result === result ? (remainder ? result - remainder : result) : 0;
-}
-
-module.exports = toInteger;
-
-
-/***/ }),
-/* 814 */,
-/* 815 */,
-/* 816 */,
-/* 817 */
-/***/ (function(module) {
-
-/**
- * Creates a function that returns `value`.
- *
- * @static
- * @memberOf _
- * @since 2.4.0
- * @category Util
- * @param {*} value The value to return from the new function.
- * @returns {Function} Returns the new constant function.
- * @example
- *
- * var objects = _.times(2, _.constant({ 'a': 1 }));
- *
- * console.log(objects);
- * // => [{ 'a': 1 }, { 'a': 1 }]
- *
- * console.log(objects[0] === objects[1]);
- * // => true
- */
-function constant(value) {
-  return function() {
-    return value;
-  };
-}
-
-module.exports = constant;
-
-
-/***/ }),
-/* 818 */,
-/* 819 */,
-/* 820 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var eq = __webpack_require__(338);
-
-/**
- * Gets the index at which the `key` is found in `array` of key-value pairs.
- *
- * @private
- * @param {Array} array The array to inspect.
- * @param {*} key The key to search for.
- * @returns {number} Returns the index of the matched value, else `-1`.
- */
-function assocIndexOf(array, key) {
-  var length = array.length;
-  while (length--) {
-    if (eq(array[length][0], key)) {
-      return length;
-    }
-  }
-  return -1;
-}
-
-module.exports = assocIndexOf;
-
-
-/***/ }),
-/* 821 */,
-/* 822 */,
-/* 823 */,
-/* 824 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var freeGlobal = __webpack_require__(973);
-
-/** Detect free variable `self`. */
-var freeSelf = typeof self == 'object' && self && self.Object === Object && self;
-
-/** Used as a reference to the global object. */
-var root = freeGlobal || freeSelf || Function('return this')();
-
-module.exports = root;
-
-
-/***/ }),
-/* 825 */,
-/* 826 */,
-/* 827 */,
-/* 828 */,
-/* 829 */,
-/* 830 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-// Query String Utilities
-
-
-
-var QueryString = exports;
-var Buffer = __webpack_require__(293).Buffer;
-
-
-// a safe fast alternative to decodeURIComponent
-QueryString.unescapeBuffer = function(s, decodeSpaces) {
-  var out = new Buffer(s.length);
-  var state = 0;
-  var n, m, hexchar;
-
-  for (var inIndex = 0, outIndex = 0; inIndex <= s.length; inIndex++) {
-    var c = inIndex < s.length ? s.charCodeAt(inIndex) : NaN;
-    switch (state) {
-      case 0: // Any character
-        switch (c) {
-          case 37: // '%'
-            n = 0;
-            m = 0;
-            state = 1;
-            break;
-          case 43: // '+'
-            if (decodeSpaces)
-              c = 32; // ' '
-            // falls through
-          default:
-            out[outIndex++] = c;
-            break;
-        }
-        break;
-
-      case 1: // First hex digit
-        hexchar = c;
-        if (c >= 48/*0*/ && c <= 57/*9*/) {
-          n = c - 48/*0*/;
-        } else if (c >= 65/*A*/ && c <= 70/*F*/) {
-          n = c - 65/*A*/ + 10;
-        } else if (c >= 97/*a*/ && c <= 102/*f*/) {
-          n = c - 97/*a*/ + 10;
-        } else {
-          out[outIndex++] = 37/*%*/;
-          out[outIndex++] = c;
-          state = 0;
-          break;
-        }
-        state = 2;
-        break;
-
-      case 2: // Second hex digit
-        state = 0;
-        if (c >= 48/*0*/ && c <= 57/*9*/) {
-          m = c -  48/*0*/;
-        } else if (c >= 65/*A*/ && c <= 70/*F*/) {
-          m = c - 65/*A*/ + 10;
-        } else if (c >= 97/*a*/ && c <= 102/*f*/) {
-          m = c - 97/*a*/ + 10;
-        } else {
-          out[outIndex++] = 37/*%*/;
-          out[outIndex++] = hexchar;
-          out[outIndex++] = c;
-          break;
-        }
-        out[outIndex++] = 16 * n + m;
-        break;
-    }
-  }
-
-  // TODO support returning arbitrary buffers.
-
-  return out.slice(0, outIndex - 1);
-};
-
-
-function qsUnescape(s, decodeSpaces) {
-  try {
-    return decodeURIComponent(s);
-  } catch (e) {
-    return QueryString.unescapeBuffer(s, decodeSpaces).toString();
-  }
-}
-QueryString.unescape = qsUnescape;
-
-
-var hexTable = new Array(256);
-for (var i = 0; i < 256; ++i)
-  hexTable[i] = '%' + ((i < 16 ? '0' : '') + i.toString(16)).toUpperCase();
-QueryString.escape = function(str) {
-  // replaces encodeURIComponent
-  // http://www.ecma-international.org/ecma-262/5.1/#sec-15.1.3.4
-  if (typeof str !== 'string')
-    str += '';
-  var out = '';
-  var lastPos = 0;
-
-  for (var i = 0; i < str.length; ++i) {
-    var c = str.charCodeAt(i);
-
-    // These characters do not need escaping (in order):
-    // ! - . _ ~
-    // ' ( ) *
-    // digits
-    // alpha (uppercase)
-    // alpha (lowercase)
-    if (c === 0x21 || c === 0x2D || c === 0x2E || c === 0x5F || c === 0x7E ||
-        (c >= 0x27 && c <= 0x2A) ||
-        (c >= 0x30 && c <= 0x39) ||
-        (c >= 0x41 && c <= 0x5A) ||
-        (c >= 0x61 && c <= 0x7A)) {
-      continue;
-    }
-
-    if (i - lastPos > 0)
-      out += str.slice(lastPos, i);
-
-    // Other ASCII characters
-    if (c < 0x80) {
-      lastPos = i + 1;
-      out += hexTable[c];
-      continue;
-    }
-
-    // Multi-byte characters ...
-    if (c < 0x800) {
-      lastPos = i + 1;
-      out += hexTable[0xC0 | (c >> 6)] + hexTable[0x80 | (c & 0x3F)];
-      continue;
-    }
-    if (c < 0xD800 || c >= 0xE000) {
-      lastPos = i + 1;
-      out += hexTable[0xE0 | (c >> 12)] +
-             hexTable[0x80 | ((c >> 6) & 0x3F)] +
-             hexTable[0x80 | (c & 0x3F)];
-      continue;
-    }
-    // Surrogate pair
-    ++i;
-    var c2;
-    if (i < str.length)
-      c2 = str.charCodeAt(i) & 0x3FF;
-    else
-      throw new URIError('URI malformed');
-    lastPos = i + 1;
-    c = 0x10000 + (((c & 0x3FF) << 10) | c2);
-    out += hexTable[0xF0 | (c >> 18)] +
-           hexTable[0x80 | ((c >> 12) & 0x3F)] +
-           hexTable[0x80 | ((c >> 6) & 0x3F)] +
-           hexTable[0x80 | (c & 0x3F)];
-  }
-  if (lastPos === 0)
-    return str;
-  if (lastPos < str.length)
-    return out + str.slice(lastPos);
-  return out;
-};
-
-var stringifyPrimitive = function(v) {
-  if (typeof v === 'string')
-    return v;
-  if (typeof v === 'number' && isFinite(v))
-    return '' + v;
-  if (typeof v === 'boolean')
-    return v ? 'true' : 'false';
-  return '';
-};
-
-
-QueryString.stringify = QueryString.encode = function(obj, sep, eq, options) {
-  sep = sep || '&';
-  eq = eq || '=';
-
-  var encode = QueryString.escape;
-  if (options && typeof options.encodeURIComponent === 'function') {
-    encode = options.encodeURIComponent;
-  }
-
-  if (obj !== null && typeof obj === 'object') {
-    var keys = Object.keys(obj);
-    var len = keys.length;
-    var flast = len - 1;
-    var fields = '';
-    for (var i = 0; i < len; ++i) {
-      var k = keys[i];
-      var v = obj[k];
-      var ks = encode(stringifyPrimitive(k)) + eq;
-
-      if (Array.isArray(v)) {
-        var vlen = v.length;
-        var vlast = vlen - 1;
-        for (var j = 0; j < vlen; ++j) {
-          fields += ks + encode(stringifyPrimitive(v[j]));
-          if (j < vlast)
-            fields += sep;
-        }
-        if (vlen && i < flast)
-          fields += sep;
-      } else {
-        fields += ks + encode(stringifyPrimitive(v));
-        if (i < flast)
-          fields += sep;
-      }
-    }
-    return fields;
-  }
-  return '';
-};
-
-// Parse a key/val string.
-QueryString.parse = QueryString.decode = function(qs, sep, eq, options) {
-  sep = sep || '&';
-  eq = eq || '=';
-
-  var obj = {};
-
-  if (typeof qs !== 'string' || qs.length === 0) {
-    return obj;
-  }
-
-  if (typeof sep !== 'string')
-    sep += '';
-
-  var eqLen = eq.length;
-  var sepLen = sep.length;
-
-  var maxKeys = 1000;
-  if (options && typeof options.maxKeys === 'number') {
-    maxKeys = options.maxKeys;
-  }
-
-  var pairs = Infinity;
-  if (maxKeys > 0)
-    pairs = maxKeys;
-
-  var decode = QueryString.unescape;
-  if (options && typeof options.decodeURIComponent === 'function') {
-    decode = options.decodeURIComponent;
-  }
-  var customDecode = (decode !== qsUnescape);
-
-  var keys = [];
-  var lastPos = 0;
-  var sepIdx = 0;
-  var eqIdx = 0;
-  var key = '';
-  var value = '';
-  var keyEncoded = customDecode;
-  var valEncoded = customDecode;
-  var encodeCheck = 0;
-  for (var i = 0; i < qs.length; ++i) {
-    var code = qs.charCodeAt(i);
-
-    // Try matching key/value pair separator (e.g. '&')
-    if (code === sep.charCodeAt(sepIdx)) {
-      if (++sepIdx === sepLen) {
-        // Key/value pair separator match!
-        var end = i - sepIdx + 1;
-        if (eqIdx < eqLen) {
-          // If we didn't find the key/value separator, treat the substring as
-          // part of the key instead of the value
-          if (lastPos < end)
-            key += qs.slice(lastPos, end);
-        } else if (lastPos < end)
-          value += qs.slice(lastPos, end);
-        if (keyEncoded)
-          key = decodeStr(key, decode);
-        if (valEncoded)
-          value = decodeStr(value, decode);
-        // Use a key array lookup instead of using hasOwnProperty(), which is
-        // slower
-        if (keys.indexOf(key) === -1) {
-          obj[key] = value;
-          keys[keys.length] = key;
-        } else {
-          var curValue = obj[key];
-          // `instanceof Array` is used instead of Array.isArray() because it
-          // is ~15-20% faster with v8 4.7 and is safe to use because we are
-          // using it with values being created within this function
-          if (curValue instanceof Array)
-            curValue[curValue.length] = value;
-          else
-            obj[key] = [curValue, value];
-        }
-        if (--pairs === 0)
-          break;
-        keyEncoded = valEncoded = customDecode;
-        encodeCheck = 0;
-        key = value = '';
-        lastPos = i + 1;
-        sepIdx = eqIdx = 0;
-      }
-      continue;
-    } else {
-      sepIdx = 0;
-      if (!valEncoded) {
-        // Try to match an (valid) encoded byte (once) to minimize unnecessary
-        // calls to string decoding functions
-        if (code === 37/*%*/) {
-          encodeCheck = 1;
-        } else if (encodeCheck > 0 &&
-                   ((code >= 48/*0*/ && code <= 57/*9*/) ||
-                    (code >= 65/*A*/ && code <= 70/*Z*/) ||
-                    (code >= 97/*a*/ && code <= 102/*z*/))) {
-          if (++encodeCheck === 3)
-            valEncoded = true;
-        } else {
-          encodeCheck = 0;
-        }
-      }
-    }
-
-    // Try matching key/value separator (e.g. '=') if we haven't already
-    if (eqIdx < eqLen) {
-      if (code === eq.charCodeAt(eqIdx)) {
-        if (++eqIdx === eqLen) {
-          // Key/value separator match!
-          var end = i - eqIdx + 1;
-          if (lastPos < end)
-            key += qs.slice(lastPos, end);
-          encodeCheck = 0;
-          lastPos = i + 1;
-        }
-        continue;
-      } else {
-        eqIdx = 0;
-        if (!keyEncoded) {
-          // Try to match an (valid) encoded byte once to minimize unnecessary
-          // calls to string decoding functions
-          if (code === 37/*%*/) {
-            encodeCheck = 1;
-          } else if (encodeCheck > 0 &&
-                     ((code >= 48/*0*/ && code <= 57/*9*/) ||
-                      (code >= 65/*A*/ && code <= 70/*Z*/) ||
-                      (code >= 97/*a*/ && code <= 102/*z*/))) {
-            if (++encodeCheck === 3)
-              keyEncoded = true;
-          } else {
-            encodeCheck = 0;
-          }
-        }
-      }
-    }
-
-    if (code === 43/*+*/) {
-      if (eqIdx < eqLen) {
-        if (i - lastPos > 0)
-          key += qs.slice(lastPos, i);
-        key += '%20';
-        keyEncoded = true;
-      } else {
-        if (i - lastPos > 0)
-          value += qs.slice(lastPos, i);
-        value += '%20';
-        valEncoded = true;
-      }
-      lastPos = i + 1;
-    }
-  }
-
-  // Check if we have leftover key or value data
-  if (pairs > 0 && (lastPos < qs.length || eqIdx > 0)) {
-    if (lastPos < qs.length) {
-      if (eqIdx < eqLen)
-        key += qs.slice(lastPos);
-      else if (sepIdx < sepLen)
-        value += qs.slice(lastPos);
-    }
-    if (keyEncoded)
-      key = decodeStr(key, decode);
-    if (valEncoded)
-      value = decodeStr(value, decode);
-    // Use a key array lookup instead of using hasOwnProperty(), which is
-    // slower
-    if (keys.indexOf(key) === -1) {
-      obj[key] = value;
-      keys[keys.length] = key;
-    } else {
-      var curValue = obj[key];
-      // `instanceof Array` is used instead of Array.isArray() because it
-      // is ~15-20% faster with v8 4.7 and is safe to use because we are
-      // using it with values being created within this function
-      if (curValue instanceof Array)
-        curValue[curValue.length] = value;
-      else
-        obj[key] = [curValue, value];
-    }
-  }
-
-  return obj;
-};
-
-
-// v8 does not optimize functions with try-catch blocks, so we isolate them here
-// to minimize the damage
-function decodeStr(s, decoder) {
-  try {
-    return decoder(s);
-  } catch (e) {
-    return QueryString.unescape(s, true);
-  }
-}
-
-/***/ }),
-/* 831 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var cloneArrayBuffer = __webpack_require__(915);
-
-/**
- * Creates a clone of `typedArray`.
- *
- * @private
- * @param {Object} typedArray The typed array to clone.
- * @param {boolean} [isDeep] Specify a deep clone.
- * @returns {Object} Returns the cloned typed array.
- */
-function cloneTypedArray(typedArray, isDeep) {
-  var buffer = isDeep ? cloneArrayBuffer(typedArray.buffer) : typedArray.buffer;
-  return new typedArray.constructor(buffer, typedArray.byteOffset, typedArray.length);
-}
-
-module.exports = cloneTypedArray;
-
-
-/***/ }),
-/* 832 */,
-/* 833 */,
-/* 834 */,
-/* 835 */
-/***/ (function(module) {
-
-module.exports = require("url");
-
-/***/ }),
-/* 836 */
-/***/ (function(__unusedmodule, exports) {
-
-"use strict";
-
-
-exports.__esModule = true;
-exports.default = void 0;
-// These functions will update the request.
-// They'll be given {req, value, paramter, spec, operation}.
-var _default = {
-  body: bodyBuilder,
-  header: headerBuilder,
-  query: queryBuilder,
-  path: pathBuilder,
-  formData: formDataBuilder
-}; // Add the body to the request
-
-exports.default = _default;
-
-function bodyBuilder({
-  req,
-  value
-}) {
-  req.body = value;
-} // Add a form data object.
-
-
-function formDataBuilder({
-  req,
-  value,
-  parameter
-}) {
-  if (value || parameter.allowEmptyValue) {
-    req.form = req.form || {};
-    req.form[parameter.name] = {
-      value,
-      allowEmptyValue: parameter.allowEmptyValue,
-      collectionFormat: parameter.collectionFormat
-    };
-  }
-} // Add a header to the request
-
-
-function headerBuilder({
-  req,
-  parameter,
-  value
-}) {
-  req.headers = req.headers || {};
-
-  if (typeof value !== 'undefined') {
-    req.headers[parameter.name] = value;
-  }
-} // Replace path paramters, with values ( ie: the URL )
-
-
-function pathBuilder({
-  req,
-  value,
-  parameter
-}) {
-  req.url = req.url.split(`{${parameter.name}}`).join(encodeURIComponent(value));
-} // Add a query to the `query` object, which will later be stringified into the URL's search
-
-
-function queryBuilder({
-  req,
-  value,
-  parameter
-}) {
-  req.query = req.query || {};
-
-  if (value === false && parameter.type === 'boolean') {
-    value = 'false';
-  }
-
-  if (value === 0 && ['number', 'integer'].indexOf(parameter.type) > -1) {
-    value = '0';
-  }
-
-  if (value) {
-    req.query[parameter.name] = {
-      collectionFormat: parameter.collectionFormat,
-      value
-    };
-  } else if (parameter.allowEmptyValue && value !== undefined) {
-    const paramName = parameter.name;
-    req.query[paramName] = req.query[paramName] || {};
-    req.query[paramName].allowEmptyValue = true;
-  }
-}
-
-/***/ }),
-/* 837 */
-/***/ (function(module) {
-
-/**
- * lodash 3.0.0 (Custom Build) <https://lodash.com/>
- * Build: `lodash modern modularize exports="npm" -o ./`
- * Copyright 2012-2015 The Dojo Foundation <http://dojofoundation.org/>
- * Based on Underscore.js 1.7.0 <http://underscorejs.org/LICENSE>
- * Copyright 2009-2015 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
- * Available under MIT license <https://lodash.com/license>
- */
-
-/** Used to match template delimiters. */
-var reInterpolate = /<%=([\s\S]+?)%>/g;
-
-module.exports = reInterpolate;
-
-
-/***/ }),
-/* 838 */,
-/* 839 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var copyObject = __webpack_require__(875),
-    keys = __webpack_require__(863);
-
-/**
- * The base implementation of `_.assign` without support for multiple sources
- * or `customizer` functions.
- *
- * @private
- * @param {Object} object The destination object.
- * @param {Object} source The source object.
- * @returns {Object} Returns `object`.
- */
-function baseAssign(object, source) {
-  return object && copyObject(source, keys(source), object);
-}
-
-module.exports = baseAssign;
-
-
-/***/ }),
-/* 840 */,
-/* 841 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-"use strict";
-
-
-var Type = __webpack_require__(945);
-
-var YAML_DATE_REGEXP = new RegExp(
-  '^([0-9][0-9][0-9][0-9])'          + // [1] year
-  '-([0-9][0-9])'                    + // [2] month
-  '-([0-9][0-9])$');                   // [3] day
-
-var YAML_TIMESTAMP_REGEXP = new RegExp(
-  '^([0-9][0-9][0-9][0-9])'          + // [1] year
-  '-([0-9][0-9]?)'                   + // [2] month
-  '-([0-9][0-9]?)'                   + // [3] day
-  '(?:[Tt]|[ \\t]+)'                 + // ...
-  '([0-9][0-9]?)'                    + // [4] hour
-  ':([0-9][0-9])'                    + // [5] minute
-  ':([0-9][0-9])'                    + // [6] second
-  '(?:\\.([0-9]*))?'                 + // [7] fraction
-  '(?:[ \\t]*(Z|([-+])([0-9][0-9]?)' + // [8] tz [9] tz_sign [10] tz_hour
-  '(?::([0-9][0-9]))?))?$');           // [11] tz_minute
-
-function resolveYamlTimestamp(data) {
-  if (data === null) return false;
-  if (YAML_DATE_REGEXP.exec(data) !== null) return true;
-  if (YAML_TIMESTAMP_REGEXP.exec(data) !== null) return true;
-  return false;
-}
-
-function constructYamlTimestamp(data) {
-  var match, year, month, day, hour, minute, second, fraction = 0,
-      delta = null, tz_hour, tz_minute, date;
-
-  match = YAML_DATE_REGEXP.exec(data);
-  if (match === null) match = YAML_TIMESTAMP_REGEXP.exec(data);
-
-  if (match === null) throw new Error('Date resolve error');
-
-  // match: [1] year [2] month [3] day
-
-  year = +(match[1]);
-  month = +(match[2]) - 1; // JS month starts with 0
-  day = +(match[3]);
-
-  if (!match[4]) { // no hour
-    return new Date(Date.UTC(year, month, day));
-  }
-
-  // match: [4] hour [5] minute [6] second [7] fraction
-
-  hour = +(match[4]);
-  minute = +(match[5]);
-  second = +(match[6]);
-
-  if (match[7]) {
-    fraction = match[7].slice(0, 3);
-    while (fraction.length < 3) { // milli-seconds
-      fraction += '0';
-    }
-    fraction = +fraction;
-  }
-
-  // match: [8] tz [9] tz_sign [10] tz_hour [11] tz_minute
-
-  if (match[9]) {
-    tz_hour = +(match[10]);
-    tz_minute = +(match[11] || 0);
-    delta = (tz_hour * 60 + tz_minute) * 60000; // delta in mili-seconds
-    if (match[9] === '-') delta = -delta;
-  }
-
-  date = new Date(Date.UTC(year, month, day, hour, minute, second, fraction));
-
-  if (delta) date.setTime(date.getTime() - delta);
-
-  return date;
-}
-
-function representYamlTimestamp(object /*, style*/) {
-  return object.toISOString();
-}
-
-module.exports = new Type('tag:yaml.org,2002:timestamp', {
-  kind: 'scalar',
-  resolve: resolveYamlTimestamp,
-  construct: constructYamlTimestamp,
-  instanceOf: Date,
-  represent: representYamlTimestamp
-});
-
-
-/***/ }),
-/* 842 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-"use strict";
-
-
-var Type = __webpack_require__(945);
-
-var _hasOwnProperty = Object.prototype.hasOwnProperty;
-var _toString       = Object.prototype.toString;
-
-function resolveYamlOmap(data) {
-  if (data === null) return true;
-
-  var objectKeys = [], index, length, pair, pairKey, pairHasKey,
-      object = data;
-
-  for (index = 0, length = object.length; index < length; index += 1) {
-    pair = object[index];
-    pairHasKey = false;
-
-    if (_toString.call(pair) !== '[object Object]') return false;
-
-    for (pairKey in pair) {
-      if (_hasOwnProperty.call(pair, pairKey)) {
-        if (!pairHasKey) pairHasKey = true;
-        else return false;
-      }
-    }
-
-    if (!pairHasKey) return false;
-
-    if (objectKeys.indexOf(pairKey) === -1) objectKeys.push(pairKey);
-    else return false;
-  }
-
-  return true;
-}
-
-function constructYamlOmap(data) {
-  return data !== null ? data : [];
-}
-
-module.exports = new Type('tag:yaml.org,2002:omap', {
-  kind: 'sequence',
-  resolve: resolveYamlOmap,
-  construct: constructYamlOmap
-});
-
-
-/***/ }),
-/* 843 */,
-/* 844 */,
-/* 845 */,
-/* 846 */,
-/* 847 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var assignValue = __webpack_require__(363),
-    castPath = __webpack_require__(929),
-    isIndex = __webpack_require__(160),
-    isObject = __webpack_require__(323),
-    toKey = __webpack_require__(503);
-
-/**
- * The base implementation of `_.set`.
- *
- * @private
- * @param {Object} object The object to modify.
- * @param {Array|string} path The path of the property to set.
- * @param {*} value The value to set.
- * @param {Function} [customizer] The function to customize path creation.
- * @returns {Object} Returns `object`.
- */
-function baseSet(object, path, value, customizer) {
-  if (!isObject(object)) {
-    return object;
-  }
-  path = castPath(path, object);
-
-  var index = -1,
-      length = path.length,
-      lastIndex = length - 1,
-      nested = object;
-
-  while (nested != null && ++index < length) {
-    var key = toKey(path[index]),
-        newValue = value;
-
-    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
-      return object;
-    }
-
-    if (index != lastIndex) {
-      var objValue = nested[key];
-      newValue = customizer ? customizer(objValue, key, nested) : undefined;
-      if (newValue === undefined) {
-        newValue = isObject(objValue)
-          ? objValue
-          : (isIndex(path[index + 1]) ? [] : {});
-      }
-    }
-    assignValue(nested, key, newValue);
-    nested = nested[key];
-  }
-  return object;
-}
-
-module.exports = baseSet;
-
-
-/***/ }),
-/* 848 */,
-/* 849 */,
-/* 850 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var baseIsTypedArray = __webpack_require__(412),
-    baseUnary = __webpack_require__(231),
-    nodeUtil = __webpack_require__(616);
-
-/* Node.js helper references. */
-var nodeIsTypedArray = nodeUtil && nodeUtil.isTypedArray;
-
-/**
- * Checks if `value` is classified as a typed array.
- *
- * @static
- * @memberOf _
- * @since 3.0.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is a typed array, else `false`.
- * @example
- *
- * _.isTypedArray(new Uint8Array);
- * // => true
- *
- * _.isTypedArray([]);
- * // => false
- */
-var isTypedArray = nodeIsTypedArray ? baseUnary(nodeIsTypedArray) : baseIsTypedArray;
-
-module.exports = isTypedArray;
-
-
-/***/ }),
-/* 851 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var isObject = __webpack_require__(323),
-    isPrototype = __webpack_require__(514),
-    nativeKeysIn = __webpack_require__(540);
-
-/** Used for built-in method references. */
-var objectProto = Object.prototype;
-
-/** Used to check objects for own properties. */
-var hasOwnProperty = objectProto.hasOwnProperty;
-
-/**
- * The base implementation of `_.keysIn` which doesn't treat sparse arrays as dense.
- *
- * @private
- * @param {Object} object The object to query.
- * @returns {Array} Returns the array of property names.
- */
-function baseKeysIn(object) {
-  if (!isObject(object)) {
-    return nativeKeysIn(object);
-  }
-  var isProto = isPrototype(object),
-      result = [];
-
-  for (var key in object) {
-    if (!(key == 'constructor' && (isProto || !hasOwnProperty.call(object, key)))) {
-      result.push(key);
-    }
-  }
-  return result;
-}
-
-module.exports = baseKeysIn;
-
-
-/***/ }),
-/* 852 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-/*!
- * mime-db
- * Copyright(c) 2014 Jonathan Ong
- * MIT Licensed
- */
-
-/**
- * Module exports.
- */
-
-module.exports = __webpack_require__(539)
-
-
-/***/ }),
-/* 853 */,
-/* 854 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var isObject = __webpack_require__(323);
-
-/**
- * Checks if `value` is suitable for strict equality comparisons, i.e. `===`.
- *
- * @private
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` if suitable for strict
- *  equality comparisons, else `false`.
- */
-function isStrictComparable(value) {
-  return value === value && !isObject(value);
-}
-
-module.exports = isStrictComparable;
-
-
-/***/ }),
-/* 855 */,
-/* 856 */,
-/* 857 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var arrayPush = __webpack_require__(883),
-    isArray = __webpack_require__(143);
-
-/**
- * The base implementation of `getAllKeys` and `getAllKeysIn` which uses
- * `keysFunc` and `symbolsFunc` to get the enumerable property names and
- * symbols of `object`.
- *
- * @private
- * @param {Object} object The object to query.
- * @param {Function} keysFunc The function to get the keys of `object`.
- * @param {Function} symbolsFunc The function to get the symbols of `object`.
- * @returns {Array} Returns the array of property names and symbols.
- */
-function baseGetAllKeys(object, keysFunc, symbolsFunc) {
-  var result = keysFunc(object);
-  return isArray(object) ? result : arrayPush(result, symbolsFunc(object));
-}
-
-module.exports = baseGetAllKeys;
-
-
-/***/ }),
-/* 858 */,
-/* 859 */,
-/* 860 */,
-/* 861 */,
-/* 862 */,
-/* 863 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var arrayLikeKeys = __webpack_require__(389),
-    baseKeys = __webpack_require__(351),
-    isArrayLike = __webpack_require__(146);
-
-/**
- * Creates an array of the own enumerable property names of `object`.
- *
- * **Note:** Non-object values are coerced to objects. See the
- * [ES spec](http://ecma-international.org/ecma-262/7.0/#sec-object.keys)
- * for more details.
- *
- * @static
- * @since 0.1.0
- * @memberOf _
- * @category Object
- * @param {Object} object The object to query.
- * @returns {Array} Returns the array of property names.
- * @example
- *
- * function Foo() {
- *   this.a = 1;
- *   this.b = 2;
- * }
- *
- * Foo.prototype.c = 3;
- *
- * _.keys(new Foo);
- * // => ['a', 'b'] (iteration order is not guaranteed)
- *
- * _.keys('hi');
- * // => ['0', '1']
- */
-function keys(object) {
-  return isArrayLike(object) ? arrayLikeKeys(object) : baseKeys(object);
-}
-
-module.exports = keys;
-
-
-/***/ }),
-/* 864 */,
-/* 865 */,
-/* 866 */,
-/* 867 */,
-/* 868 */,
-/* 869 */,
-/* 870 */
-/***/ (function(module) {
-
-/**
- * Gets the stack value for `key`.
- *
- * @private
- * @name get
- * @memberOf Stack
- * @param {string} key The key of the value to get.
- * @returns {*} Returns the entry value.
- */
-function stackGet(key) {
-  return this.__data__.get(key);
-}
-
-module.exports = stackGet;
-
-
-/***/ }),
-/* 871 */,
-/* 872 */,
-/* 873 */,
-/* 874 */,
-/* 875 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var assignValue = __webpack_require__(363),
-    baseAssignValue = __webpack_require__(772);
-
-/**
- * Copies properties of `source` to `object`.
- *
- * @private
- * @param {Object} source The object to copy properties from.
- * @param {Array} props The property identifiers to copy.
- * @param {Object} [object={}] The object to copy properties to.
- * @param {Function} [customizer] The function to customize copied values.
- * @returns {Object} Returns `object`.
- */
-function copyObject(source, props, object, customizer) {
-  var isNew = !object;
-  object || (object = {});
-
-  var index = -1,
-      length = props.length;
-
-  while (++index < length) {
-    var key = props[index];
-
-    var newValue = customizer
-      ? customizer(object[key], source[key], key, object, source)
-      : undefined;
-
-    if (newValue === undefined) {
-      newValue = source[key];
-    }
-    if (isNew) {
-      baseAssignValue(object, key, newValue);
-    } else {
-      assignValue(object, key, newValue);
-    }
-  }
-  return object;
-}
-
-module.exports = copyObject;
-
-
-/***/ }),
-/* 876 */,
-/* 877 */,
-/* 878 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var getNative = __webpack_require__(319);
-
-/* Built-in method references that are verified to be native. */
-var nativeCreate = getNative(Object, 'create');
-
-module.exports = nativeCreate;
-
-
-/***/ }),
-/* 879 */
-/***/ (function(module) {
-
-/**
- * Gets the value at `key` of `object`.
- *
- * @private
- * @param {Object} [object] The object to query.
- * @param {string} key The key of the property to get.
- * @returns {*} Returns the property value.
- */
-function getValue(object, key) {
-  return object == null ? undefined : object[key];
-}
-
-module.exports = getValue;
-
-
-/***/ }),
-/* 880 */,
-/* 881 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-
-exports.__esModule = true;
-exports.default = resolveSubtree;
-
-var _get = _interopRequireDefault(__webpack_require__(0));
-
-var _resolver = _interopRequireDefault(__webpack_require__(922));
-
-var _helpers = __webpack_require__(992);
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-function ownKeys(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); keys.push.apply(keys, symbols); } return keys; }
-
-function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i] != null ? arguments[i] : {}; if (i % 2) { ownKeys(Object(source), true).forEach(function (key) { _defineProperty(target, key, source[key]); }); } else if (Object.getOwnPropertyDescriptors) { Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)); } else { ownKeys(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } } return target; }
-
-function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
-
-async function resolveSubtree(obj, path, opts = {}) {
-  const {
-    returnEntireTree,
-    baseDoc,
-    requestInterceptor,
-    responseInterceptor,
-    parameterMacro,
-    modelPropertyMacro,
-    useCircularStructures
-  } = opts;
-  const resolveOptions = {
-    pathDiscriminator: path,
-    baseDoc,
-    requestInterceptor,
-    responseInterceptor,
-    parameterMacro,
-    modelPropertyMacro,
-    useCircularStructures
-  };
-  const {
-    spec: normalized
-  } = (0, _helpers.normalizeSwagger)({
-    spec: obj
-  });
-  const result = await (0, _resolver.default)(_objectSpread(_objectSpread({}, resolveOptions), {}, {
-    spec: normalized,
-    allowMetaPatches: true,
-    skipNormalization: true
-  }));
-
-  if (!returnEntireTree && Array.isArray(path) && path.length) {
-    result.spec = (0, _get.default)(result.spec, path) || null;
-  }
-
-  return result;
-}
-
-/***/ }),
-/* 882 */,
-/* 883 */
-/***/ (function(module) {
-
-/**
- * Appends the elements of `values` to `array`.
- *
- * @private
- * @param {Array} array The array to modify.
- * @param {Array} values The values to append.
- * @returns {Array} Returns `array`.
- */
-function arrayPush(array, values) {
-  var index = -1,
-      length = values.length,
-      offset = array.length;
-
-  while (++index < length) {
-    array[offset + index] = values[index];
-  }
-  return array;
-}
-
-module.exports = arrayPush;
-
-
-/***/ }),
-/* 884 */,
-/* 885 */,
-/* 886 */,
-/* 887 */,
-/* 888 */,
-/* 889 */,
-/* 890 */,
-/* 891 */,
-/* 892 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var iterate    = __webpack_require__(157)
-  , initState  = __webpack_require__(794)
-  , terminator = __webpack_require__(939)
-  ;
-
-// Public API
-module.exports = serialOrdered;
-// sorting helpers
-module.exports.ascending  = ascending;
-module.exports.descending = descending;
-
-/**
- * Runs iterator over provided sorted array elements in series
- *
- * @param   {array|object} list - array or object (named list) to iterate over
- * @param   {function} iterator - iterator to run
- * @param   {function} sortMethod - custom sort function
- * @param   {function} callback - invoked when all elements processed
- * @returns {function} - jobs terminator
- */
-function serialOrdered(list, iterator, sortMethod, callback)
-{
-  var state = initState(list, sortMethod);
-
-  iterate(list, iterator, state, function iteratorHandler(error, result)
-  {
-    if (error)
-    {
-      callback(error, result);
-      return;
-    }
-
-    state.index++;
-
-    // are we there yet?
-    if (state.index < (state['keyedList'] || list).length)
-    {
-      iterate(list, iterator, state, iteratorHandler);
-      return;
-    }
-
-    // done here
-    callback(null, state.results);
-  });
-
-  return terminator.bind(state, callback);
-}
-
-/*
- * -- Sort methods
- */
-
-/**
- * sort helper to sort array elements in ascending order
- *
- * @param   {mixed} a - an item to compare
- * @param   {mixed} b - an item to compare
- * @returns {number} - comparison result
- */
-function ascending(a, b)
-{
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-
-/**
- * sort helper to sort array elements in descending order
- *
- * @param   {mixed} a - an item to compare
- * @param   {mixed} b - an item to compare
- * @returns {number} - comparison result
- */
-function descending(a, b)
-{
-  return -1 * ascending(a, b);
-}
-
-
-/***/ }),
-/* 893 */,
-/* 894 */,
-/* 895 */,
-/* 896 */
-/***/ (function(module) {
-
-/**
- * Checks if a stack value for `key` exists.
- *
- * @private
- * @name has
- * @memberOf Stack
- * @param {string} key The key of the entry to check.
- * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
- */
-function stackHas(key) {
-  return this.__data__.has(key);
-}
-
-module.exports = stackHas;
-
-
-/***/ }),
-/* 897 */,
-/* 898 */,
-/* 899 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var baseClamp = __webpack_require__(295),
-    baseToString = __webpack_require__(280),
-    toInteger = __webpack_require__(813),
-    toString = __webpack_require__(428);
-
-/**
- * Checks if `string` starts with the given target string.
- *
- * @static
- * @memberOf _
- * @since 3.0.0
- * @category String
- * @param {string} [string=''] The string to inspect.
- * @param {string} [target] The string to search for.
- * @param {number} [position=0] The position to search from.
- * @returns {boolean} Returns `true` if `string` starts with `target`,
- *  else `false`.
- * @example
- *
- * _.startsWith('abc', 'a');
- * // => true
- *
- * _.startsWith('abc', 'b');
- * // => false
- *
- * _.startsWith('abc', 'b', 1);
- * // => true
- */
-function startsWith(string, target, position) {
-  string = toString(string);
-  position = position == null
-    ? 0
-    : baseClamp(toInteger(position), 0, string.length);
-
-  target = baseToString(target);
-  return string.slice(position, position + target.length) == target;
-}
-
-module.exports = startsWith;
-
-
-/***/ }),
-/* 900 */,
-/* 901 */,
-/* 902 */,
-/* 903 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-var assocIndexOf = __webpack_require__(820);
-
-/**
- * Checks if a list cache value for `key` exists.
- *
- * @private
- * @name has
- * @memberOf ListCache
- * @param {string} key The key of the entry to check.
- * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
- */
-function listCacheHas(key) {
-  return assocIndexOf(this.__data__, key) > -1;
-}
-
-module.exports = listCacheHas;
-
-
-/***/ }),
-/* 904 */,
-/* 905 */,
-/* 906 */
+/* 716 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* module decorator */ module = __webpack_require__.nmd(module);
@@ -20180,7 +18328,7 @@ module.exports = listCacheHas;
  * Copyright Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
  */
 var reInterpolate = __webpack_require__(837),
-    templateSettings = __webpack_require__(51);
+    templateSettings = __webpack_require__(194);
 
 /** Used to detect hot functions by number of calls within a span of milliseconds. */
 var HOT_COUNT = 800,
@@ -21829,6 +19977,3076 @@ module.exports = template;
 
 
 /***/ }),
+/* 717 */,
+/* 718 */,
+/* 719 */,
+/* 720 */,
+/* 721 */
+/***/ (function(module) {
+
+var traverse = module.exports = function (obj) {
+    return new Traverse(obj);
+};
+
+function Traverse (obj) {
+    this.value = obj;
+}
+
+Traverse.prototype.get = function (ps) {
+    var node = this.value;
+    for (var i = 0; i < ps.length; i ++) {
+        var key = ps[i];
+        if (!node || !hasOwnProperty.call(node, key)) {
+            node = undefined;
+            break;
+        }
+        node = node[key];
+    }
+    return node;
+};
+
+Traverse.prototype.has = function (ps) {
+    var node = this.value;
+    for (var i = 0; i < ps.length; i ++) {
+        var key = ps[i];
+        if (!node || !hasOwnProperty.call(node, key)) {
+            return false;
+        }
+        node = node[key];
+    }
+    return true;
+};
+
+Traverse.prototype.set = function (ps, value) {
+    var node = this.value;
+    for (var i = 0; i < ps.length - 1; i ++) {
+        var key = ps[i];
+        if (!hasOwnProperty.call(node, key)) node[key] = {};
+        node = node[key];
+    }
+    node[ps[i]] = value;
+    return value;
+};
+
+Traverse.prototype.map = function (cb) {
+    return walk(this.value, cb, true);
+};
+
+Traverse.prototype.forEach = function (cb) {
+    this.value = walk(this.value, cb, false);
+    return this.value;
+};
+
+Traverse.prototype.reduce = function (cb, init) {
+    var skip = arguments.length === 1;
+    var acc = skip ? this.value : init;
+    this.forEach(function (x) {
+        if (!this.isRoot || !skip) {
+            acc = cb.call(this, acc, x);
+        }
+    });
+    return acc;
+};
+
+Traverse.prototype.paths = function () {
+    var acc = [];
+    this.forEach(function (x) {
+        acc.push(this.path); 
+    });
+    return acc;
+};
+
+Traverse.prototype.nodes = function () {
+    var acc = [];
+    this.forEach(function (x) {
+        acc.push(this.node);
+    });
+    return acc;
+};
+
+Traverse.prototype.clone = function () {
+    var parents = [], nodes = [];
+    
+    return (function clone (src) {
+        for (var i = 0; i < parents.length; i++) {
+            if (parents[i] === src) {
+                return nodes[i];
+            }
+        }
+        
+        if (typeof src === 'object' && src !== null) {
+            var dst = copy(src);
+            
+            parents.push(src);
+            nodes.push(dst);
+            
+            forEach(objectKeys(src), function (key) {
+                dst[key] = clone(src[key]);
+            });
+            
+            parents.pop();
+            nodes.pop();
+            return dst;
+        }
+        else {
+            return src;
+        }
+    })(this.value);
+};
+
+function walk (root, cb, immutable) {
+    var path = [];
+    var parents = [];
+    var alive = true;
+    
+    return (function walker (node_) {
+        var node = immutable ? copy(node_) : node_;
+        var modifiers = {};
+        
+        var keepGoing = true;
+        
+        var state = {
+            node : node,
+            node_ : node_,
+            path : [].concat(path),
+            parent : parents[parents.length - 1],
+            parents : parents,
+            key : path.slice(-1)[0],
+            isRoot : path.length === 0,
+            level : path.length,
+            circular : null,
+            update : function (x, stopHere) {
+                if (!state.isRoot) {
+                    state.parent.node[state.key] = x;
+                }
+                state.node = x;
+                if (stopHere) keepGoing = false;
+            },
+            'delete' : function (stopHere) {
+                delete state.parent.node[state.key];
+                if (stopHere) keepGoing = false;
+            },
+            remove : function (stopHere) {
+                if (isArray(state.parent.node)) {
+                    state.parent.node.splice(state.key, 1);
+                }
+                else {
+                    delete state.parent.node[state.key];
+                }
+                if (stopHere) keepGoing = false;
+            },
+            keys : null,
+            before : function (f) { modifiers.before = f },
+            after : function (f) { modifiers.after = f },
+            pre : function (f) { modifiers.pre = f },
+            post : function (f) { modifiers.post = f },
+            stop : function () { alive = false },
+            block : function () { keepGoing = false }
+        };
+        
+        if (!alive) return state;
+        
+        function updateState() {
+            if (typeof state.node === 'object' && state.node !== null) {
+                if (!state.keys || state.node_ !== state.node) {
+                    state.keys = objectKeys(state.node)
+                }
+                
+                state.isLeaf = state.keys.length == 0;
+                
+                for (var i = 0; i < parents.length; i++) {
+                    if (parents[i].node_ === node_) {
+                        state.circular = parents[i];
+                        break;
+                    }
+                }
+            }
+            else {
+                state.isLeaf = true;
+                state.keys = null;
+            }
+            
+            state.notLeaf = !state.isLeaf;
+            state.notRoot = !state.isRoot;
+        }
+        
+        updateState();
+        
+        // use return values to update if defined
+        var ret = cb.call(state, state.node);
+        if (ret !== undefined && state.update) state.update(ret);
+        
+        if (modifiers.before) modifiers.before.call(state, state.node);
+        
+        if (!keepGoing) return state;
+        
+        if (typeof state.node == 'object'
+        && state.node !== null && !state.circular) {
+            parents.push(state);
+            
+            updateState();
+            
+            forEach(state.keys, function (key, i) {
+                path.push(key);
+                
+                if (modifiers.pre) modifiers.pre.call(state, state.node[key], key);
+                
+                var child = walker(state.node[key]);
+                if (immutable && hasOwnProperty.call(state.node, key)) {
+                    state.node[key] = child.node;
+                }
+                
+                child.isLast = i == state.keys.length - 1;
+                child.isFirst = i == 0;
+                
+                if (modifiers.post) modifiers.post.call(state, child);
+                
+                path.pop();
+            });
+            parents.pop();
+        }
+        
+        if (modifiers.after) modifiers.after.call(state, state.node);
+        
+        return state;
+    })(root).node;
+}
+
+function copy (src) {
+    if (typeof src === 'object' && src !== null) {
+        var dst;
+        
+        if (isArray(src)) {
+            dst = [];
+        }
+        else if (isDate(src)) {
+            dst = new Date(src.getTime ? src.getTime() : src);
+        }
+        else if (isRegExp(src)) {
+            dst = new RegExp(src);
+        }
+        else if (isError(src)) {
+            dst = { message: src.message };
+        }
+        else if (isBoolean(src)) {
+            dst = new Boolean(src);
+        }
+        else if (isNumber(src)) {
+            dst = new Number(src);
+        }
+        else if (isString(src)) {
+            dst = new String(src);
+        }
+        else if (Object.create && Object.getPrototypeOf) {
+            dst = Object.create(Object.getPrototypeOf(src));
+        }
+        else if (src.constructor === Object) {
+            dst = {};
+        }
+        else {
+            var proto =
+                (src.constructor && src.constructor.prototype)
+                || src.__proto__
+                || {}
+            ;
+            var T = function () {};
+            T.prototype = proto;
+            dst = new T;
+        }
+        
+        forEach(objectKeys(src), function (key) {
+            dst[key] = src[key];
+        });
+        return dst;
+    }
+    else return src;
+}
+
+var objectKeys = Object.keys || function keys (obj) {
+    var res = [];
+    for (var key in obj) res.push(key)
+    return res;
+};
+
+function toS (obj) { return Object.prototype.toString.call(obj) }
+function isDate (obj) { return toS(obj) === '[object Date]' }
+function isRegExp (obj) { return toS(obj) === '[object RegExp]' }
+function isError (obj) { return toS(obj) === '[object Error]' }
+function isBoolean (obj) { return toS(obj) === '[object Boolean]' }
+function isNumber (obj) { return toS(obj) === '[object Number]' }
+function isString (obj) { return toS(obj) === '[object String]' }
+
+var isArray = Array.isArray || function isArray (xs) {
+    return Object.prototype.toString.call(xs) === '[object Array]';
+};
+
+var forEach = function (xs, fn) {
+    if (xs.forEach) return xs.forEach(fn)
+    else for (var i = 0; i < xs.length; i++) {
+        fn(xs[i], i, xs);
+    }
+};
+
+forEach(objectKeys(Traverse.prototype), function (key) {
+    traverse[key] = function (obj) {
+        var args = [].slice.call(arguments, 1);
+        var t = new Traverse(obj);
+        return t[key].apply(t, args);
+    };
+});
+
+var hasOwnProperty = Object.hasOwnProperty || function (obj, key) {
+    return key in obj;
+};
+
+
+/***/ }),
+/* 722 */,
+/* 723 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+"use strict";
+// JS-YAML's default schema for `safeLoad` function.
+// It is not described in the YAML specification.
+//
+// This schema is based on standard YAML's Core schema and includes most of
+// extra types described at YAML tag repository. (http://yaml.org/type/)
+
+
+
+
+
+var Schema = __webpack_require__(43);
+
+
+module.exports = new Schema({
+  include: [
+    __webpack_require__(611)
+  ],
+  implicit: [
+    __webpack_require__(841),
+    __webpack_require__(633)
+  ],
+  explicit: [
+    __webpack_require__(913),
+    __webpack_require__(842),
+    __webpack_require__(947),
+    __webpack_require__(100)
+  ]
+});
+
+
+/***/ }),
+/* 724 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var memoize = __webpack_require__(507);
+
+/** Used as the maximum memoize cache size. */
+var MAX_MEMOIZE_SIZE = 500;
+
+/**
+ * A specialized version of `_.memoize` which clears the memoized function's
+ * cache when it exceeds `MAX_MEMOIZE_SIZE`.
+ *
+ * @private
+ * @param {Function} func The function to have its output memoized.
+ * @returns {Function} Returns the new memoized function.
+ */
+function memoizeCapped(func) {
+  var result = memoize(func, function(key) {
+    if (cache.size === MAX_MEMOIZE_SIZE) {
+      cache.clear();
+    }
+    return key;
+  });
+
+  var cache = result.cache;
+  return result;
+}
+
+module.exports = memoizeCapped;
+
+
+/***/ }),
+/* 725 */,
+/* 726 */,
+/* 727 */
+/***/ (function(module) {
+
+/**
+ * A specialized version of `_.map` for arrays without support for iteratee
+ * shorthands.
+ *
+ * @private
+ * @param {Array} [array] The array to iterate over.
+ * @param {Function} iteratee The function invoked per iteration.
+ * @returns {Array} Returns the new mapped array.
+ */
+function arrayMap(array, iteratee) {
+  var index = -1,
+      length = array == null ? 0 : array.length,
+      result = Array(length);
+
+  while (++index < length) {
+    result[index] = iteratee(array[index], index, array);
+  }
+  return result;
+}
+
+module.exports = arrayMap;
+
+
+/***/ }),
+/* 728 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var baseIsEqual = __webpack_require__(190),
+    get = __webpack_require__(0),
+    hasIn = __webpack_require__(360),
+    isKey = __webpack_require__(90),
+    isStrictComparable = __webpack_require__(854),
+    matchesStrictComparable = __webpack_require__(2),
+    toKey = __webpack_require__(503);
+
+/** Used to compose bitmasks for value comparisons. */
+var COMPARE_PARTIAL_FLAG = 1,
+    COMPARE_UNORDERED_FLAG = 2;
+
+/**
+ * The base implementation of `_.matchesProperty` which doesn't clone `srcValue`.
+ *
+ * @private
+ * @param {string} path The path of the property to get.
+ * @param {*} srcValue The value to match.
+ * @returns {Function} Returns the new spec function.
+ */
+function baseMatchesProperty(path, srcValue) {
+  if (isKey(path) && isStrictComparable(srcValue)) {
+    return matchesStrictComparable(toKey(path), srcValue);
+  }
+  return function(object) {
+    var objValue = get(object, path);
+    return (objValue === undefined && objValue === srcValue)
+      ? hasIn(object, path)
+      : baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG);
+  };
+}
+
+module.exports = baseMatchesProperty;
+
+
+/***/ }),
+/* 729 */,
+/* 730 */,
+/* 731 */
+/***/ (function(__unusedmodule, exports) {
+
+"use strict";
+
+
+exports.__esModule = true;
+exports.default = serialize;
+
+/*
+  Serializer that serializes according to a media type instead of OpenAPI's
+  `style` + `explode` constructs.
+*/
+function serialize(value, mediaType) {
+  if (mediaType.includes('application/json')) {
+    if (typeof value === 'string') {
+      // Assume the user has a JSON string
+      return value;
+    }
+
+    return JSON.stringify(value);
+  }
+
+  return value.toString();
+}
+
+/***/ }),
+/* 732 */
+/***/ (function(module) {
+
+module.exports = {"consumes":["application/json"],"produces":["application/json"],"schemes":["https","http"],"swagger":"2.0","info":{"description":"LightStep x[PM] JSON APIs","title":"LightStep Public API","termsOfService":"This is an early-access API that may change.","version":"0.2"},"host":"api.lightstep.com","basePath":"/public/v0.2","paths":{"/{organization}/projects":{"get":{"description":"Returns information about all projects in an organization","produces":["application/json"],"tags":["Projects"],"summary":"List Projects","operationId":"listProjectsID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about all projects in the organization"},"400":{"description":"No organization parameter provided"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"}}}},"/{organization}/projects/{project}":{"get":{"description":"Returns information about a specific project","produces":["application/json"],"tags":["Projects"],"summary":"Get Project","operationId":"getProjectID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about all projects in the project"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}}},"/{organization}/projects/{project}/conditions":{"get":{"description":"Returns information about all conditions in a project","produces":["application/json"],"tags":["Conditions"],"summary":"List Conditions","operationId":"listConditionsID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about all conditions in the project"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}},"post":{"description":"Creates a new condition. You create conditions for thresholds that mark [SLAs or metrics](https://docs.lightstep.com/docs/create-alert-conditions-and-rules) on a Stream that you want to be warned about.","produces":["application/json"],"tags":["Conditions"],"summary":"Create Condition","operationId":"postConditionID","parameters":[{"description":"Condition definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/conditionRequestBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"The condition was created successfully"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}}},"/{organization}/projects/{project}/conditions/{condition-id}":{"get":{"description":"Returns information about a specific condition. Include the organization, project, and condition identifier in the path parameter.","produces":["application/json"],"tags":["Conditions"],"summary":"Get Condition","operationId":"getConditionID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Condition identifier","name":"condition-id","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted data about the given condition"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"The condition identifier is not valid"}}},"delete":{"description":"Deletes an existing condition","produces":["application/json"],"tags":["Conditions"],"summary":"Delete Condition","operationId":"deleteConditionID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the condition to delete","name":"condition-id","in":"path","required":true}],"responses":{"204":{"description":"Condition was successfully deleted"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}},"patch":{"description":"Modifies the settings for an existing condition. You cannot modify the condition to refer to a different stream.","produces":["application/json"],"tags":["Conditions"],"summary":"Update Condition","operationId":"patchConditionID","parameters":[{"description":"Condition definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/conditionRequestBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the condition to modify","name":"condition-id","in":"path","required":true}],"responses":{"200":{"description":"The condition was updated successfully"},"400":{"description":"One or more parameter(s) are not valid"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"Condition identifier not found"}}}},"/{organization}/projects/{project}/conditions/{condition-id}/status":{"get":{"description":"Returns status information about a specific condition","produces":["application/json"],"tags":["Conditions"],"summary":"Get Condition Status","operationId":"getConditionStatusID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Condition identifier","name":"condition-id","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted data about the status of the given condition"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"The condition identifier is not valid"}}}},"/{organization}/projects/{project}/dashboard/{dashboard-id}":{"delete":{"description":"Deletes an existing dashboard. Deleting a dashboard only deletes the dashboard; the Streams are still available.","produces":["application/json"],"tags":["Dashboards"],"summary":"Delete Dashboard","operationId":"deleteDashboardID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the dashboard to delete","name":"dashboard-id","in":"path","required":true}],"responses":{"204":{"description":"Dashboard was successfully deleted"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"Dashboard identifier not found"}}}},"/{organization}/projects/{project}/dashboards":{"get":{"description":"Returns information about all dashboards in a project","produces":["application/json"],"tags":["Dashboards"],"summary":"List Dashboards","operationId":"listDashboardsID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about all dashboards in the project"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}},"post":{"description":"Creates a new dashboard, with inline stream definitions. Automatically creates the necessary streams if they do not already exist.","produces":["application/json"],"tags":["Dashboards"],"summary":"Create Dashboard","operationId":"createDashboardID","parameters":[{"description":"Dashboard definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/dashboardRequestBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"The dashboard was created (or updated) successfully"},"400":{"description":"No organization parameter provided"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}}},"/{organization}/projects/{project}/dashboards/{dashboard-id}":{"get":{"description":"Returns complete information about a specific dashboard, including stream definitions","produces":["application/json"],"tags":["Dashboards"],"summary":"Get Dashboard","operationId":"getDashboardID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Dashboard identifier","name":"dashboard-id","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about the dashboard"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name or dashboard ID is not found"}}},"patch":{"description":"Updates the dashboard with a new name (if applicable), and replaces the set of streams on the dashboard. Streams that are removed from the dashboard will not be deleted from the project. Streams that are not supplied are removed from the dashboard.","produces":["application/json"],"tags":["Dashboards"],"summary":"Update Dashboard","operationId":"patchDashboardID","parameters":[{"description":"Dashboard definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/dashboardRequestBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the dashboard to modify","name":"dashboard-id","in":"path","required":true}],"responses":{"200":{"description":"The dashboard was updated successfully"},"400":{"description":"One or more parameter(s) are not valid"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"Dashboard identifier not found"}}}},"/{organization}/projects/{project}/destinations":{"get":{"description":"Returns information about all destinations in a project. Include the organization and project in the path parameter.","produces":["application/json"],"tags":["Destinations"],"summary":"List Destinations","operationId":"listDestinations","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted data about the given destination"},"401":{"description":"The API key does not provide access to this resource (such as a project or organization)"},"404":{"description":"Project name is not found"},"500":{"description":"Internal service error (retryable)"}}},"post":{"description":"Creates a new destination. Note: To create a Slack destination, you must first [enable a Slack workspace integration](https://docs.lightstep.com/docs/create-and-manage-destinations#add-a-slack-workspace-integration) in the General Settings page. To create a PagerDuty destination, you must provide a [PagerDuty integration key](https://support.pagerduty.com/docs/services-and-integrations).","produces":["application/json"],"tags":["Destinations"],"summary":"Create Destination","operationId":"postDestinationID","parameters":[{"description":"Destination definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/destinationRequestBodyExample"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"The destination was created successfully"},"401":{"description":"The API key does not provide access to this resource (such as a project or organization)"},"404":{"description":"Project name is not found"},"500":{"description":"Internal service error (retryable)"}}}},"/{organization}/projects/{project}/destinations/{destination-id}":{"get":{"description":"Returns information about a specific destination. Include the organization, project, and destination identifier in the path parameter.","produces":["application/json"],"tags":["Destinations"],"summary":"Get Destination","operationId":"getDestinationID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Destination identifier","name":"destination-id","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted data about the given destination"},"401":{"description":"The API key does not provide access to this resource (such as a project or organization)"},"404":{"description":"Project name is not found or destination identifier is not found"},"500":{"description":"Internal service error (retryable)"}}},"delete":{"description":"Deletes an existing destination","produces":["application/json"],"tags":["Destinations"],"summary":"Delete Destination","operationId":"deleteDestinationID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the destination to delete","name":"destination-id","in":"path","required":true}],"responses":{"204":{"description":"The destination was successfully deleted"},"401":{"description":"The API Key does not provide access to this resource"},"404":{"description":"Project name or destination ID is not found"},"500":{"description":"Internal service error (retryable)"}}}},"/{organization}/projects/{project}/directory/services":{"get":{"description":"Returns all reporting services for a project","produces":["application/json"],"tags":["Services"],"summary":"List Services","operationId":"listServicesID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"integer","description":"Service object count limit in paginated response","name":"limit","in":"query"},{"type":"integer","description":"Service object offset in paginated response","name":"offset","in":"query"}],"responses":{"200":{"description":"JSON-formatted metadata about all services reporting in the project"},"400":{"description":"One or more parameter(s) are not valid"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}}},"/{organization}/projects/{project}/snapshots":{"post":{"description":"Creates a new Snapshot for the provided query","produces":["application/json"],"tags":["Snapshots"],"summary":"Create Snapshot","operationId":"createSnapshot","parameters":[{"description":"Span query to create a snapshot for","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/snapshotCreate"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"The snapshot was created successfully"},"400":{"description":"Query parameters invalid"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"429":{"description":"Snapshot creation exceeded rate limit"}}}},"/{organization}/projects/{project}/stored-traces":{"get":{"description":"Returns complete traces that have already been assembled and stored. You must include a [span-id](https://docs.lightstep.com/docs/spans-in-opentelemetry) as a query parameter.","produces":["application/json"],"tags":["Traces"],"summary":"Stored Traces","operationId":"storedTracesID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the project that the trace belongs to","name":"project","in":"path","required":true},{"type":"string","description":"Key that uniquely identifies a stored trace","name":"span-id","in":"query","required":true}],"responses":{"200":{"description":"JSON representation of a stored trace"},"400":{"description":"Missing required parameter"},"404":{"description":"No stored traces found"}}}},"/{organization}/projects/{project}/streams":{"get":{"description":"Returns information about all streams in a project","produces":["application/json"],"tags":["Streams"],"summary":"List Streams","operationId":"listStreamsID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about all streams in the project"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}},"post":{"description":"Creates a new stream (or updates an existing stream if the query is identical). You do not need to include a clientID.","produces":["application/json"],"tags":["Streams"],"summary":"Create Stream","operationId":"postStreamID","parameters":[{"description":"Stream definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/createOrUpdateBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"The stream was created (or updated) successfully"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}}},"/{organization}/projects/{project}/streams/{stream-id}":{"get":{"description":"Returns information about a specific stream","produces":["application/json"],"tags":["Streams"],"summary":"Get Stream","operationId":"getStreamID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Stream identifier","name":"stream-id","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted data about the given stream"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"The stream identifier is not valid"}}},"delete":{"description":"Deletes an existing stream. Deleting a stream also deletes all historical data persisted for that stream and cannot be undone, so be sure you want to delete it.","produces":["application/json"],"tags":["Streams"],"summary":"Delete Stream","operationId":"deleteStreamID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the stream to delete","name":"stream-id","in":"path","required":true}],"responses":{"204":{"description":"Stream was successfully deleted"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"}}},"patch":{"description":"Modifies the settings for an existing stream, to provide more descriptive info about it. A clientID must be supplied. By default, streams are given the query parameters as the name and cannot be updated using the query field (results in a error).","produces":["application/json"],"tags":["Streams"],"summary":"Update Stream","operationId":"patchStreamID","parameters":[{"description":"Stream definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/createOrUpdateBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the stream to modify","name":"stream-id","in":"path","required":true}],"responses":{"200":{"description":"The stream was created (or updated) successfully"},"400":{"description":"One or more parameter(s) are not valid"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"Stream identifier not found"}}}},"/{organization}/projects/{project}/streams/{stream-id}/conditions":{"get":{"description":"Returns information about all conditions in a specific stream. You can create multiple conditions for a Stream. For example, you might create one condition for a \"warning\" threshold and another for a \"critical\" threshold. Or, you might want to have different thresholds for multiple percentiles (e.g., the 99th percentile can exceed 100ms, but your 50th percentile should never exceed 50ms).","produces":["application/json"],"tags":["Conditions"],"summary":"List Conditions for Stream","operationId":"listConditionsForStreamID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Stream identifier","name":"stream-id","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about all conditions in the given stream"},"401":{"description":"The API Key does not provide access to this resource, or the organization name does not exist"},"404":{"description":"Project name is not found"},"500":{"description":"The stream identifier is not valid"}}}},"/{organization}/projects/{project}/streams/{stream-id}/timeseries":{"get":{"description":"Returns timeseries data for a stream","produces":["application/json"],"tags":["Streams"],"summary":"Timeseries","operationId":"timeseriesID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the project that contains the stream","name":"project","in":"path","required":true},{"type":"string","description":"The ID of the stream to fetch timeseries data for","name":"stream-id","in":"path","required":true},{"type":"string","format":"date-time","description":"Beginning of the time range being queried, e.g., 2018-01-20T02:30:00-08:00","name":"oldest-time","in":"query","required":true},{"type":"string","format":"date-time","description":"End of the time range being queried, e.g., 2018-01-22T06:30:00-08:00","name":"youngest-time","in":"query","required":true},{"minimum":60000,"type":"integer","default":60000,"description":"Length of time represented by each \"point\" (time window) in the timeseries, in milliseconds. The minimum value (highest resolution data) for this parameter is 60000 (representing 1 minute of data per point). Larger values will result in latency distributions being merged.","name":"resolution-ms","in":"query","required":true},{"maximum":1,"minimum":0,"type":"integer","default":0,"description":"Boolean value that indicates whether the response should include example trace information for each time window. 0=false, 1=true","name":"include-exemplars","in":"query"},{"maximum":1,"minimum":0,"type":"integer","default":0,"description":"Indicates whether the response should specify the number of spans represented by each time window. 0=false, 1=true","name":"include-ops-counts","in":"query"},{"maximum":1,"minimum":0,"type":"integer","default":0,"description":"Indicates whether the response should specify the number of spans with errors in each time window. 0=false, 1=true","name":"include-error-counts","in":"query"},{"type":"array","items":{"type":"number"},"collectionFormat":"multi","description":"A (possibly) repeated field that indicates what latency percentiles to return for each time window, if any. Valid for values [0, 99.99].","name":"percentile","in":"query"}],"responses":{"200":{"description":"JSON representation of a timeseries"},"400":{"description":"One or more of the request parameter(s) is not valid"},"401":{"description":"The API Key does not provide access to this resource"},"404":{"description":"Project name is not found"},"500":{"description":"Stream ID is not valid, or other internal error"}}}},"/{organization}/projects/{project}/wf_links":{"get":{"description":"Returns information on all workflow link definitions within a project","produces":["application/json"],"tags":["WorkflowLinks"],"summary":"List Workflow Links","operationId":"listWorkflowLinksID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about all workflow link definitions in the project"},"401":{"description":"The API Key does not provide access to this resource"},"404":{"description":"Organization or project not found"}}},"post":{"description":"Creates a new workflow link. Links within a project must have a unique combination of Name and URL. Admin or Member privileges are required to create workflow links. Workflow name can also include [variables](https://docs.lightstep.com/docs/links-reference), allowing the link name to change dynamically based on the span being viewed.","produces":["application/json"],"tags":["WorkflowLinks"],"summary":"Create Workflow Link","operationId":"createWorkflowLinkID","parameters":[{"description":"Workflow Link definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/externalLinkRequestBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true}],"responses":{"200":{"description":"The workflow link was created successfully"},"400":{"description":"Bad request - could not decode JSON request, or a parameter (name, URL, or Rules) is missing"},"401":{"description":"The API Key does not provide access to this resource"},"403":{"description":"Unsupported request to create resource - links within the same project cannot have the same name and URL."},"404":{"description":"Organization or project not found"}}}},"/{organization}/projects/{project}/wf_links/{link-id}":{"get":{"description":"Returns information on a specific workflow link definition within a project","produces":["application/json"],"tags":["WorkflowLinks"],"summary":"Get Workflow Link","operationId":"getWorkflowLinkID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Workflow Link identifier","name":"link-id","in":"path","required":true}],"responses":{"200":{"description":"JSON-formatted metadata about the workflow link"},"401":{"description":"The API Key does not provide access to this resource"},"404":{"description":"Organization, project name, or workflow link ID is not found"}}},"delete":{"description":"Deletes an existing workflow link","produces":["application/json"],"tags":["WorkflowLinks"],"summary":"Delete Workflow Link","operationId":"deleteWorkflowLinkID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the workflow link to delete","name":"link-id","in":"path","required":true}],"responses":{"204":{"description":"The workflow link was successfully deleted"},"401":{"description":"The API Key does not provide access to this resource"},"404":{"description":"Organization, project name, or workflow link ID is not found"}}},"patch":{"description":"Updates the workflow link with a new name or URL (if applicable), or replaces the set of rules on the workflow link. If a non-empty parameter (i.e., name, URL, or Rules) is provided, the field will be overwritten with the new value. Links within a project must have a unique combination of name and URL. Admin or Member privileges are required to update workflow links. Searches that are not supplied are removed from the workflow link.","produces":["application/json"],"tags":["WorkflowLinks"],"summary":"Update Workflow Link","operationId":"patchWorkflowLinkID","parameters":[{"description":"Workflow Link definition","name":"data","in":"body","required":true,"schema":{"$ref":"#/definitions/externalLinkRequestBody"}},{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true},{"type":"string","description":"Name of the customer project","name":"project","in":"path","required":true},{"type":"string","description":"Identifier of the workflow link to modify","name":"link-id","in":"path","required":true}],"responses":{"200":{"description":"The workflow link was updated successfully"},"400":{"description":"Bad request - could not decode JSON request"},"401":{"description":"The API Key does not provide access to this resource"},"403":{"description":"Unsupported request to create resource - links within the same project cannot have the same name and URL."},"404":{"description":"Organization, project name, or workflow link ID is not found"}}}},"/{organization}/test":{"get":{"description":"A read-only endpoint for testing your authentication key","produces":["application/text"],"tags":["Test"],"summary":"Read Test","operationId":"testReadID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true}],"responses":{"200":{"description":"OK!"},"401":{"description":"Unauthorized"}}},"post":{"description":"A write endpoint for testing your authentication key","produces":["application/text"],"tags":["Test"],"summary":"Write Test","operationId":"testWriteID","parameters":[{"type":"string","description":"Name of the customer organization","name":"organization","in":"path","required":true}],"responses":{"200":{"description":"OK!"},"401":{"description":"Unauthorized"}}}}},"definitions":{"Links":{"type":"object","additionalProperties":{"type":"object"},"x-go-package":"github.com/lightstep/crouton/service/api/jsonapi/v02"},"LinksObj":{"type":"object","properties":{"links":{"$ref":"#/definitions/Links"}},"x-go-package":"github.com/lightstep/crouton/service/api/jsonapi/v02"},"Micros":{"type":"integer","format":"int64","x-go-package":"github.com/lightstep/common-go/base"},"Name":{"type":"string","x-go-package":"github.com/lightstep/crouton/service/api/types"},"RelatedResourceObject":{"type":"object","required":["type","id"],"properties":{"id":{"description":"Unique identifier of the related resource","type":"string","x-go-name":"ID"},"type":{"description":"Valid values:\nStream resource: \"stream\"\nCondition resource: \"condition\"","type":"string","x-go-name":"Type"}},"x-go-package":"github.com/lightstep/crouton/service/api/jsonapi/v02"},"Rules":{"type":"object","additionalProperties":{"type":"array","items":{"type":"string"}},"x-go-package":"github.com/lightstep/crouton/service/api/types"},"URL":{"type":"string","x-go-package":"github.com/lightstep/crouton/service/api/types"},"conditionRequest":{"type":"object","required":["type"],"properties":{"attributes":{"$ref":"#/definitions/conditionRequestAttributes"},"id":{"description":"Unique identifier of the described resource.\nDo not populate this field for POST or PATCH requests; use path parameters instead.","type":"string","x-go-name":"ID"},"relationships":{"$ref":"#/definitions/conditionRequestRelationships"},"type":{"description":"Valid values:\nStream operations: \"stream\"\nCondition operations: \"condition\"","type":"string","x-go-name":"Type"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"conditionRequestAttributes":{"type":"object","properties":{"custom-data":{"type":"object","additionalProperties":{"type":"object"},"x-go-name":"CustomData"},"eval-window-ms":{"type":"integer","format":"int64","x-go-name":"EvaluationWindowMs"},"expression":{"type":"string","x-go-name":"Expression"},"name":{"type":"string","x-go-name":"Name"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"conditionRequestBody":{"type":"object","properties":{"data":{"$ref":"#/definitions/conditionRequest"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"conditionRequestRelationships":{"type":"object","properties":{"stream":{"$ref":"#/definitions/RelatedResourceObject"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"createAccessTokenAttributes":{"type":"object","properties":{"name":{"type":"string","x-go-name":"Name"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"createAccessTokenBody":{"type":"object","properties":{"data":{"$ref":"#/definitions/createAccessTokenRequest"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"createAccessTokenRequest":{"type":"object","properties":{"attributes":{"$ref":"#/definitions/createAccessTokenAttributes"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"createOrUpdateBody":{"type":"object","properties":{"data":{"$ref":"#/definitions/createOrUpdateRequest"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"createOrUpdateRequest":{"type":"object","required":["type","attributes"],"properties":{"attributes":{"$ref":"#/definitions/streamRequestAttributes"},"id":{"description":"Unique identifier of the described resource.\nDo not populate this field for POST or PATCH requests; use path parameters instead.","type":"string","x-go-name":"ID"},"type":{"description":"Valid values:\nStream operations: \"stream\"\nCondition operations: \"condition\"","type":"string","x-go-name":"Type"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"createProjectBody":{"type":"object","properties":{"data":{"$ref":"#/definitions/createProjectRequest"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"createProjectRequest":{"type":"object","required":["name"],"properties":{"name":{"type":"string","x-go-name":"Name"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"dashboardAttributes":{"type":"object","required":["name"],"properties":{"name":{"description":"Name for the dashboard (free-form string)","type":"string","x-go-name":"Name"},"streams":{"description":"Streams to be added to the dashboard. If the stream exists already, include the ID.\nIf it does not, do not include an ID. A new stream will be created","type":"array","items":{"$ref":"#/definitions/streamResponse"},"x-go-name":"Streams"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"dashboardRelationships":{"type":"object","properties":{"project":{"$ref":"#/definitions/LinksObj"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"dashboardRequest":{"type":"object","required":["type"],"properties":{"attributes":{"$ref":"#/definitions/dashboardAttributes"},"id":{"description":"Unique identifier of the described resource.\nDo not populate this field for POST or PATCH requests; use path parameters instead.","type":"string","x-go-name":"ID"},"relationships":{"$ref":"#/definitions/dashboardRelationships"},"type":{"description":"Valid values:\nStream operations: \"stream\"\nCondition operations: \"condition\"","type":"string","x-go-name":"Type"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"dashboardRequestBody":{"type":"object","properties":{"data":{"$ref":"#/definitions/dashboardRequest"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"destinationRequestBodyExample":{"type":"object","properties":{"data":{"type":"object","properties":{"attributes":{"type":"object","properties":{"channel":{"description":"Required parameter for Slack only","type":"string","x-go-name":"Channel"},"custom_headers":{"description":"Optional parameter for Webhook only","type":"object","additionalProperties":{"type":"string"},"x-go-name":"CustomHeaders"},"destination_type":{"description":"Required parameter. Can be one of: `\"slack\"`, `\"pagerduty\"`, and `\"webhook\"`.","type":"string","x-go-name":"DestinationType"},"integration_key":{"description":"Required parameter for PagerDuty only","type":"string","x-go-name":"IntegrationKey"},"name":{"description":"Required parameter","type":"string","x-go-name":"Name"},"url":{"description":"Required parameter for Webhook only","type":"string","x-go-name":"URL"}},"x-go-name":"Attributes"},"type":{"description":"`Type` should be `\"destination\"`","type":"string","x-go-name":"Type"}},"x-go-name":"Data"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"externalLinkAttributes":{"type":"object","properties":{"created_by":{"type":"string","x-go-name":"CreatedBy"},"last_clicked_micros":{"$ref":"#/definitions/Micros"},"last_edited_micros":{"$ref":"#/definitions/Micros"},"name":{"$ref":"#/definitions/Name"},"rules":{"$ref":"#/definitions/Rules"},"url":{"$ref":"#/definitions/URL"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"externalLinkRelationships":{"type":"object","properties":{"project":{"$ref":"#/definitions/LinksObj"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"externalLinkRequest":{"type":"object","required":["type"],"properties":{"attributes":{"$ref":"#/definitions/externalLinkAttributes"},"id":{"description":"Unique identifier of the described resource.\nDo not populate this field for POST or PATCH requests; use path parameters instead.","type":"string","x-go-name":"ID"},"relationships":{"$ref":"#/definitions/externalLinkRelationships"},"type":{"description":"Valid values:\nStream operations: \"stream\"\nCondition operations: \"condition\"","type":"string","x-go-name":"Type"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"externalLinkRequestBody":{"type":"object","properties":{"data":{"$ref":"#/definitions/externalLinkRequest"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"snapshotCreate":{"type":"object","properties":{"data":{"type":"object","properties":{"attributes":{"type":"object","required":["query"],"properties":{"query":{"description":"The query string itself (see Query Syntax section for details).","type":"string","x-go-name":"Query"}},"x-go-name":"Attributes"}},"x-go-name":"Data"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"streamAttributes":{"type":"object","required":["name"],"properties":{"created-by":{"description":"User who created stream","type":"string","x-go-name":"CreatedBy"},"created-time":{"description":"Date+time stream was created","type":"string","format":"date-time","x-go-name":"CreatedTime"},"custom-data":{"description":"Custom JSON data that can be set by an end user and will be included in notifications.","type":"object","additionalProperties":{"type":"object"},"x-go-name":"CustomData"},"data-last-received-time":{"description":"Date+time stream was last updated","type":"string","format":"date-time","x-go-name":"DataLastReceivedTime"},"name":{"description":"Name for the stream (free-form string)","type":"string","x-go-name":"Name"},"query":{"description":"The query string itself (see Query Syntax section for details).\nOnce a stream has been created, this string cannot be modified.\n<b>Required when creating new streams.</b>","type":"string","x-go-name":"Query"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"streamRelationships":{"type":"object","properties":{"conditions":{"$ref":"#/definitions/LinksObj"},"project":{"$ref":"#/definitions/LinksObj"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"streamRequestAttributes":{"type":"object","required":["name"],"properties":{"custom_data":{"description":"Custom JSON data that can be set by an end user and will be included in notifications.","type":"object","additionalProperties":{"type":"object"},"x-go-name":"CustomData"},"name":{"description":"Name for the stream (free-form string)","type":"string","x-go-name":"Name"},"query":{"description":"The query string itself (see Query Syntax section for details).\nOnce a stream has been created, this string cannot be modified.\n<b>Required when creating new streams.</b>","type":"string","x-go-name":"Query"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"},"streamResponse":{"type":"object","required":["type"],"properties":{"attributes":{"$ref":"#/definitions/streamAttributes"},"id":{"description":"Unique identifier of the described resource.\nDo not populate this field for POST or PATCH requests; use path parameters instead.","type":"string","x-go-name":"ID"},"links":{"$ref":"#/definitions/Links"},"relationships":{"$ref":"#/definitions/streamRelationships"},"type":{"description":"Valid values:\nStream operations: \"stream\"\nCondition operations: \"condition\"","type":"string","x-go-name":"Type"}},"x-go-package":"github.com/lightstep/crouton/service/api/public/v02/handlers"}},"securityDefinitions":{"api_key":{"type":"apiKey","name":"Authorization","in":"header"}},"security":[{"api_key":[]}]};
+
+/***/ }),
+/* 733 */,
+/* 734 */,
+/* 735 */,
+/* 736 */,
+/* 737 */,
+/* 738 */,
+/* 739 */,
+/* 740 */
+/***/ (function(module) {
+
+"use strict";
+
+
+
+function isNothing(subject) {
+  return (typeof subject === 'undefined') || (subject === null);
+}
+
+
+function isObject(subject) {
+  return (typeof subject === 'object') && (subject !== null);
+}
+
+
+function toArray(sequence) {
+  if (Array.isArray(sequence)) return sequence;
+  else if (isNothing(sequence)) return [];
+
+  return [ sequence ];
+}
+
+
+function extend(target, source) {
+  var index, length, key, sourceKeys;
+
+  if (source) {
+    sourceKeys = Object.keys(source);
+
+    for (index = 0, length = sourceKeys.length; index < length; index += 1) {
+      key = sourceKeys[index];
+      target[key] = source[key];
+    }
+  }
+
+  return target;
+}
+
+
+function repeat(string, count) {
+  var result = '', cycle;
+
+  for (cycle = 0; cycle < count; cycle += 1) {
+    result += string;
+  }
+
+  return result;
+}
+
+
+function isNegativeZero(number) {
+  return (number === 0) && (Number.NEGATIVE_INFINITY === 1 / number);
+}
+
+
+module.exports.isNothing      = isNothing;
+module.exports.isObject       = isObject;
+module.exports.toArray        = toArray;
+module.exports.repeat         = repeat;
+module.exports.isNegativeZero = isNegativeZero;
+module.exports.extend         = extend;
+
+
+/***/ }),
+/* 741 */,
+/* 742 */,
+/* 743 */,
+/* 744 */
+/***/ (function(module, exports, __webpack_require__) {
+
+/* module decorator */ module = __webpack_require__.nmd(module);
+var root = __webpack_require__(824);
+
+/** Detect free variable `exports`. */
+var freeExports =  true && exports && !exports.nodeType && exports;
+
+/** Detect free variable `module`. */
+var freeModule = freeExports && "object" == 'object' && module && !module.nodeType && module;
+
+/** Detect the popular CommonJS extension `module.exports`. */
+var moduleExports = freeModule && freeModule.exports === freeExports;
+
+/** Built-in value references. */
+var Buffer = moduleExports ? root.Buffer : undefined,
+    allocUnsafe = Buffer ? Buffer.allocUnsafe : undefined;
+
+/**
+ * Creates a clone of  `buffer`.
+ *
+ * @private
+ * @param {Buffer} buffer The buffer to clone.
+ * @param {boolean} [isDeep] Specify a deep clone.
+ * @returns {Buffer} Returns the cloned buffer.
+ */
+function cloneBuffer(buffer, isDeep) {
+  if (isDeep) {
+    return buffer.slice();
+  }
+  var length = buffer.length,
+      result = allocUnsafe ? allocUnsafe(length) : new buffer.constructor(length);
+
+  buffer.copy(result);
+  return result;
+}
+
+module.exports = cloneBuffer;
+
+
+/***/ }),
+/* 745 */,
+/* 746 */,
+/* 747 */
+/***/ (function(module) {
+
+module.exports = require("fs");
+
+/***/ }),
+/* 748 */,
+/* 749 */,
+/* 750 */,
+/* 751 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var defer = __webpack_require__(500);
+
+// API
+module.exports = async;
+
+/**
+ * Runs provided callback asynchronously
+ * even if callback itself is not
+ *
+ * @param   {function} callback - callback to invoke
+ * @returns {function} - augmented callback
+ */
+function async(callback)
+{
+  var isAsync = false;
+
+  // check if async happened
+  defer(function() { isAsync = true; });
+
+  return function async_callback(err, result)
+  {
+    if (isAsync)
+    {
+      callback(err, result);
+    }
+    else
+    {
+      defer(function nextTick_callback()
+      {
+        callback(err, result);
+      });
+    }
+  };
+}
+
+
+/***/ }),
+/* 752 */,
+/* 753 */,
+/* 754 */
+/***/ (function(module) {
+
+/**
+ * The base implementation of `_.hasIn` without support for deep paths.
+ *
+ * @private
+ * @param {Object} [object] The object to query.
+ * @param {Array|string} key The key to check.
+ * @returns {boolean} Returns `true` if `key` exists, else `false`.
+ */
+function baseHasIn(object, key) {
+  return object != null && key in Object(object);
+}
+
+module.exports = baseHasIn;
+
+
+/***/ }),
+/* 755 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var assocIndexOf = __webpack_require__(820);
+
+/**
+ * Gets the list cache value for `key`.
+ *
+ * @private
+ * @name get
+ * @memberOf ListCache
+ * @param {string} key The key of the value to get.
+ * @returns {*} Returns the entry value.
+ */
+function listCacheGet(key) {
+  var data = this.__data__,
+      index = assocIndexOf(data, key);
+
+  return index < 0 ? undefined : data[index][1];
+}
+
+module.exports = listCacheGet;
+
+
+/***/ }),
+/* 756 */,
+/* 757 */,
+/* 758 */,
+/* 759 */,
+/* 760 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var copyObject = __webpack_require__(875),
+    getSymbols = __webpack_require__(667);
+
+/**
+ * Copies own symbols of `source` to `object`.
+ *
+ * @private
+ * @param {Object} source The object to copy symbols from.
+ * @param {Object} [object={}] The object to copy symbols to.
+ * @returns {Object} Returns `object`.
+ */
+function copySymbols(source, object) {
+  return copyObject(source, getSymbols(source), object);
+}
+
+module.exports = copySymbols;
+
+
+/***/ }),
+/* 761 */
+/***/ (function(module) {
+
+module.exports = require("zlib");
+
+/***/ }),
+/* 762 */,
+/* 763 */,
+/* 764 */,
+/* 765 */,
+/* 766 */,
+/* 767 */,
+/* 768 */,
+/* 769 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var baseClone = __webpack_require__(377);
+
+/** Used to compose bitmasks for cloning. */
+var CLONE_DEEP_FLAG = 1,
+    CLONE_SYMBOLS_FLAG = 4;
+
+/**
+ * This method is like `_.clone` except that it recursively clones `value`.
+ *
+ * @static
+ * @memberOf _
+ * @since 1.0.0
+ * @category Lang
+ * @param {*} value The value to recursively clone.
+ * @returns {*} Returns the deep cloned value.
+ * @see _.clone
+ * @example
+ *
+ * var objects = [{ 'a': 1 }, { 'b': 2 }];
+ *
+ * var deep = _.cloneDeep(objects);
+ * console.log(deep[0] === objects[0]);
+ * // => false
+ */
+function cloneDeep(value) {
+  return baseClone(value, CLONE_DEEP_FLAG | CLONE_SYMBOLS_FLAG);
+}
+
+module.exports = cloneDeep;
+
+
+/***/ }),
+/* 770 */,
+/* 771 */,
+/* 772 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var defineProperty = __webpack_require__(382);
+
+/**
+ * The base implementation of `assignValue` and `assignMergeValue` without
+ * value checks.
+ *
+ * @private
+ * @param {Object} object The object to modify.
+ * @param {string} key The key of the property to assign.
+ * @param {*} value The value to assign.
+ */
+function baseAssignValue(object, key, value) {
+  if (key == '__proto__' && defineProperty) {
+    defineProperty(object, key, {
+      'configurable': true,
+      'enumerable': true,
+      'value': value,
+      'writable': true
+    });
+  } else {
+    object[key] = value;
+  }
+}
+
+module.exports = baseAssignValue;
+
+
+/***/ }),
+/* 773 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var overArg = __webpack_require__(393);
+
+/* Built-in method references for those with the same name as other `lodash` methods. */
+var nativeKeys = overArg(Object.keys, Object);
+
+module.exports = nativeKeys;
+
+
+/***/ }),
+/* 774 */,
+/* 775 */,
+/* 776 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var assocIndexOf = __webpack_require__(820);
+
+/** Used for built-in method references. */
+var arrayProto = Array.prototype;
+
+/** Built-in value references. */
+var splice = arrayProto.splice;
+
+/**
+ * Removes `key` and its value from the list cache.
+ *
+ * @private
+ * @name delete
+ * @memberOf ListCache
+ * @param {string} key The key of the value to remove.
+ * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+ */
+function listCacheDelete(key) {
+  var data = this.__data__,
+      index = assocIndexOf(data, key);
+
+  if (index < 0) {
+    return false;
+  }
+  var lastIndex = data.length - 1;
+  if (index == lastIndex) {
+    data.pop();
+  } else {
+    splice.call(data, index, 1);
+  }
+  --this.size;
+  return true;
+}
+
+module.exports = listCacheDelete;
+
+
+/***/ }),
+/* 777 */,
+/* 778 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var arrayPush = __webpack_require__(883),
+    getPrototype = __webpack_require__(931),
+    getSymbols = __webpack_require__(667),
+    stubArray = __webpack_require__(130);
+
+/* Built-in method references for those with the same name as other `lodash` methods. */
+var nativeGetSymbols = Object.getOwnPropertySymbols;
+
+/**
+ * Creates an array of the own and inherited enumerable symbols of `object`.
+ *
+ * @private
+ * @param {Object} object The object to query.
+ * @returns {Array} Returns the array of symbols.
+ */
+var getSymbolsIn = !nativeGetSymbols ? stubArray : function(object) {
+  var result = [];
+  while (object) {
+    arrayPush(result, getSymbols(object));
+    object = getPrototype(object);
+  }
+  return result;
+};
+
+module.exports = getSymbolsIn;
+
+
+/***/ }),
+/* 779 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+/*!
+ * mime-types
+ * Copyright(c) 2014 Jonathan Ong
+ * Copyright(c) 2015 Douglas Christopher Wilson
+ * MIT Licensed
+ */
+
+
+
+/**
+ * Module dependencies.
+ * @private
+ */
+
+var db = __webpack_require__(852)
+var extname = __webpack_require__(622).extname
+
+/**
+ * Module variables.
+ * @private
+ */
+
+var EXTRACT_TYPE_REGEXP = /^\s*([^;\s]*)(?:;|\s|$)/
+var TEXT_TYPE_REGEXP = /^text\//i
+
+/**
+ * Module exports.
+ * @public
+ */
+
+exports.charset = charset
+exports.charsets = { lookup: charset }
+exports.contentType = contentType
+exports.extension = extension
+exports.extensions = Object.create(null)
+exports.lookup = lookup
+exports.types = Object.create(null)
+
+// Populate the extensions/types maps
+populateMaps(exports.extensions, exports.types)
+
+/**
+ * Get the default charset for a MIME type.
+ *
+ * @param {string} type
+ * @return {boolean|string}
+ */
+
+function charset (type) {
+  if (!type || typeof type !== 'string') {
+    return false
+  }
+
+  // TODO: use media-typer
+  var match = EXTRACT_TYPE_REGEXP.exec(type)
+  var mime = match && db[match[1].toLowerCase()]
+
+  if (mime && mime.charset) {
+    return mime.charset
+  }
+
+  // default text/* to utf-8
+  if (match && TEXT_TYPE_REGEXP.test(match[1])) {
+    return 'UTF-8'
+  }
+
+  return false
+}
+
+/**
+ * Create a full Content-Type header given a MIME type or extension.
+ *
+ * @param {string} str
+ * @return {boolean|string}
+ */
+
+function contentType (str) {
+  // TODO: should this even be in this module?
+  if (!str || typeof str !== 'string') {
+    return false
+  }
+
+  var mime = str.indexOf('/') === -1
+    ? exports.lookup(str)
+    : str
+
+  if (!mime) {
+    return false
+  }
+
+  // TODO: use content-type or other module
+  if (mime.indexOf('charset') === -1) {
+    var charset = exports.charset(mime)
+    if (charset) mime += '; charset=' + charset.toLowerCase()
+  }
+
+  return mime
+}
+
+/**
+ * Get the default extension for a MIME type.
+ *
+ * @param {string} type
+ * @return {boolean|string}
+ */
+
+function extension (type) {
+  if (!type || typeof type !== 'string') {
+    return false
+  }
+
+  // TODO: use media-typer
+  var match = EXTRACT_TYPE_REGEXP.exec(type)
+
+  // get extensions
+  var exts = match && exports.extensions[match[1].toLowerCase()]
+
+  if (!exts || !exts.length) {
+    return false
+  }
+
+  return exts[0]
+}
+
+/**
+ * Lookup the MIME type for a file path/extension.
+ *
+ * @param {string} path
+ * @return {boolean|string}
+ */
+
+function lookup (path) {
+  if (!path || typeof path !== 'string') {
+    return false
+  }
+
+  // get the extension ("ext" or ".ext" or full path)
+  var extension = extname('x.' + path)
+    .toLowerCase()
+    .substr(1)
+
+  if (!extension) {
+    return false
+  }
+
+  return exports.types[extension] || false
+}
+
+/**
+ * Populate the extensions and types maps.
+ * @private
+ */
+
+function populateMaps (extensions, types) {
+  // source preference (least -> most)
+  var preference = ['nginx', 'apache', undefined, 'iana']
+
+  Object.keys(db).forEach(function forEachMimeType (type) {
+    var mime = db[type]
+    var exts = mime.extensions
+
+    if (!exts || !exts.length) {
+      return
+    }
+
+    // mime -> extensions
+    extensions[type] = exts
+
+    // extension -> mime
+    for (var i = 0; i < exts.length; i++) {
+      var extension = exts[i]
+
+      if (types[extension]) {
+        var from = preference.indexOf(db[types[extension]].source)
+        var to = preference.indexOf(mime.source)
+
+        if (types[extension] !== 'application/octet-stream' &&
+          (from > to || (from === to && types[extension].substr(0, 12) === 'application/'))) {
+          // skip the remapping
+          continue
+        }
+      }
+
+      // set the extension -> mime
+      types[extension] = type
+    }
+  })
+}
+
+
+/***/ }),
+/* 780 */,
+/* 781 */,
+/* 782 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var isObject = __webpack_require__(323);
+
+/** Built-in value references. */
+var objectCreate = Object.create;
+
+/**
+ * The base implementation of `_.create` without support for assigning
+ * properties to the created object.
+ *
+ * @private
+ * @param {Object} proto The object to inherit from.
+ * @returns {Object} Returns the new object.
+ */
+var baseCreate = (function() {
+  function object() {}
+  return function(proto) {
+    if (!isObject(proto)) {
+      return {};
+    }
+    if (objectCreate) {
+      return objectCreate(proto);
+    }
+    object.prototype = proto;
+    var result = new object;
+    object.prototype = undefined;
+    return result;
+  };
+}());
+
+module.exports = baseCreate;
+
+
+/***/ }),
+/* 783 */,
+/* 784 */,
+/* 785 */,
+/* 786 */,
+/* 787 */,
+/* 788 */
+/***/ (function(module) {
+
+module.exports = {"name":"lightstep-js-sdk","version":"0.0.8","description":"Javascript SDK for the public Lighstep API","main":"src/index.js","dependencies":{"graphviz":"0.0.9","node-fetch":"^2.6.1","swagger-client":"^3.10.12","yargs":"^16.0.3"},"bin":{"lightstep":"./bin/index.js"},"devDependencies":{"eslint":"^7.5.0","jest":"^26.1.0"},"scripts":{"test":"./node_modules/.bin/jest","e2e":"./node_modules/.bin/jest --testRegex='./e2e/e2e.js'","lint":"eslint src"},"repository":{"type":"git","url":"git+https://github.com/lightstep/lightstep-js-sdk.git"},"author":"Lighstep, Inc.","license":"ISC","bugs":{"url":"https://github.com/lightstep/lightstep-js-sdk/issues"},"homepage":"https://github.com/lightstep/lightstep-js-sdk#readme","_resolved":"","_integrity":"","_from":"lightstep-js-sdk@git://github.com/lightstep/lightstep-js-sdk.git"};
+
+/***/ }),
+/* 789 */,
+/* 790 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var isObject = __webpack_require__(323),
+    isSymbol = __webpack_require__(186);
+
+/** Used as references for various `Number` constants. */
+var NAN = 0 / 0;
+
+/** Used to match leading and trailing whitespace. */
+var reTrim = /^\s+|\s+$/g;
+
+/** Used to detect bad signed hexadecimal string values. */
+var reIsBadHex = /^[-+]0x[0-9a-f]+$/i;
+
+/** Used to detect binary string values. */
+var reIsBinary = /^0b[01]+$/i;
+
+/** Used to detect octal string values. */
+var reIsOctal = /^0o[0-7]+$/i;
+
+/** Built-in method references without a dependency on `root`. */
+var freeParseInt = parseInt;
+
+/**
+ * Converts `value` to a number.
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to process.
+ * @returns {number} Returns the number.
+ * @example
+ *
+ * _.toNumber(3.2);
+ * // => 3.2
+ *
+ * _.toNumber(Number.MIN_VALUE);
+ * // => 5e-324
+ *
+ * _.toNumber(Infinity);
+ * // => Infinity
+ *
+ * _.toNumber('3.2');
+ * // => 3.2
+ */
+function toNumber(value) {
+  if (typeof value == 'number') {
+    return value;
+  }
+  if (isSymbol(value)) {
+    return NAN;
+  }
+  if (isObject(value)) {
+    var other = typeof value.valueOf == 'function' ? value.valueOf() : value;
+    value = isObject(other) ? (other + '') : other;
+  }
+  if (typeof value != 'string') {
+    return value === 0 ? value : +value;
+  }
+  value = value.replace(reTrim, '');
+  var isBinary = reIsBinary.test(value);
+  return (isBinary || reIsOctal.test(value))
+    ? freeParseInt(value.slice(2), isBinary ? 2 : 8)
+    : (reIsBadHex.test(value) ? NAN : +value);
+}
+
+module.exports = toNumber;
+
+
+/***/ }),
+/* 791 */,
+/* 792 */,
+/* 793 */,
+/* 794 */
+/***/ (function(module) {
+
+// API
+module.exports = state;
+
+/**
+ * Creates initial state object
+ * for iteration over list
+ *
+ * @param   {array|object} list - list to iterate over
+ * @param   {function|null} sortMethod - function to use for keys sort,
+ *                                     or `null` to keep them as is
+ * @returns {object} - initial state object
+ */
+function state(list, sortMethod)
+{
+  var isNamedList = !Array.isArray(list)
+    , initState =
+    {
+      index    : 0,
+      keyedList: isNamedList || sortMethod ? Object.keys(list) : null,
+      jobs     : {},
+      results  : isNamedList ? {} : [],
+      size     : isNamedList ? Object.keys(list).length : list.length
+    }
+    ;
+
+  if (sortMethod)
+  {
+    // sort array keys based on it's values
+    // sort object's keys just on own merit
+    initState.keyedList.sort(isNamedList ? sortMethod : function(a, b)
+    {
+      return sortMethod(list[a], list[b]);
+    });
+  }
+
+  return initState;
+}
+
+
+/***/ }),
+/* 795 */,
+/* 796 */,
+/* 797 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var baseRest = __webpack_require__(407),
+    isIterateeCall = __webpack_require__(663);
+
+/**
+ * Creates a function like `_.assign`.
+ *
+ * @private
+ * @param {Function} assigner The function to assign values.
+ * @returns {Function} Returns the new assigner function.
+ */
+function createAssigner(assigner) {
+  return baseRest(function(object, sources) {
+    var index = -1,
+        length = sources.length,
+        customizer = length > 1 ? sources[length - 1] : undefined,
+        guard = length > 2 ? sources[2] : undefined;
+
+    customizer = (assigner.length > 3 && typeof customizer == 'function')
+      ? (length--, customizer)
+      : undefined;
+
+    if (guard && isIterateeCall(sources[0], sources[1], guard)) {
+      customizer = length < 3 ? undefined : customizer;
+      length = 1;
+    }
+    object = Object(object);
+    while (++index < length) {
+      var source = sources[index];
+      if (source) {
+        assigner(object, source, index, customizer);
+      }
+    }
+    return object;
+  });
+}
+
+module.exports = createAssigner;
+
+
+/***/ }),
+/* 798 */,
+/* 799 */,
+/* 800 */,
+/* 801 */,
+/* 802 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var nativeCreate = __webpack_require__(878);
+
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty = objectProto.hasOwnProperty;
+
+/**
+ * Checks if a hash value for `key` exists.
+ *
+ * @private
+ * @name has
+ * @memberOf Hash
+ * @param {string} key The key of the entry to check.
+ * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+ */
+function hashHas(key) {
+  var data = this.__data__;
+  return nativeCreate ? (data[key] !== undefined) : hasOwnProperty.call(data, key);
+}
+
+module.exports = hashHas;
+
+
+/***/ }),
+/* 803 */,
+/* 804 */,
+/* 805 */,
+/* 806 */,
+/* 807 */,
+/* 808 */,
+/* 809 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+"use strict";
+
+
+var Type = __webpack_require__(945);
+
+function resolveYamlNull(data) {
+  if (data === null) return true;
+
+  var max = data.length;
+
+  return (max === 1 && data === '~') ||
+         (max === 4 && (data === 'null' || data === 'Null' || data === 'NULL'));
+}
+
+function constructYamlNull() {
+  return null;
+}
+
+function isNull(object) {
+  return object === null;
+}
+
+module.exports = new Type('tag:yaml.org,2002:null', {
+  kind: 'scalar',
+  resolve: resolveYamlNull,
+  construct: constructYamlNull,
+  predicate: isNull,
+  represent: {
+    canonical: function () { return '~';    },
+    lowercase: function () { return 'null'; },
+    uppercase: function () { return 'NULL'; },
+    camelcase: function () { return 'Null'; }
+  },
+  defaultStyle: 'lowercase'
+});
+
+
+/***/ }),
+/* 810 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+const fetch = __webpack_require__(454)
+
+const PD_API = 'https://api.pagerduty.com'
+
+const getApiContext = async ({token, service}) => {
+    const HEADERS = {
+        "Authorization" : `Token token=${token}`,
+        "Accept"        : "application/json"
+    }
+    const serviceResponse = await fetch(`${PD_API}/services/${service}`, { headers : HEADERS })
+    if (serviceResponse.status !== 200) {
+        throw new Error(`PagerDuty API error fetching service '${service}' ${serviceResponse.status}`)
+    }
+
+    const serviceJson = await serviceResponse.json()
+    const escalationPolicyId = serviceJson.service.escalation_policy.id
+
+    const onCallResponse = await fetch(`${PD_API}/oncalls?include[]=&escalation_policy_ids[]=${escalationPolicyId}`,
+        { headers : HEADERS })
+    if (onCallResponse.status !== 200) {
+        throw new Error(`PagerDuty API error fetching oncalls ${serviceResponse.status}`)
+    }
+
+    const oncallsJson = await onCallResponse.json()
+
+    return {
+        service : serviceJson.service,
+        oncalls : oncallsJson.oncalls
+    }
+}
+
+const ICON_IMG = "https://user-images.githubusercontent.com/27153/90803915-4fe88400-e2ce-11ea-803f-47b9c244799d.png"
+
+exports.getSummary = async ({token, yamlConfig}) => {
+    const { service } = yamlConfig
+
+    try {
+        const context = await getApiContext({token, service})
+        var onCallNames = context.oncalls.map(o => o.user.summary)
+        var summaryLink = context.service.html_url
+        var message = `On-call for *${context.service.name}*: ${onCallNames}`
+        return {
+            status : "unknown",
+            message,
+            summaryLink,
+            logo   : ICON_IMG
+        }
+    } catch (e) {
+        return {
+            status      : "unknown",
+            message     : `PagerDuty API Error: ${e.message}`,
+            summaryLink : "http://www.pagerduty.com",
+            logo        : ICON_IMG
+        }
+    }
+
+}
+
+
+/***/ }),
+/* 811 */,
+/* 812 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var Hash = __webpack_require__(710),
+    ListCache = __webpack_require__(670),
+    Map = __webpack_require__(654);
+
+/**
+ * Removes all key-value entries from the map.
+ *
+ * @private
+ * @name clear
+ * @memberOf MapCache
+ */
+function mapCacheClear() {
+  this.size = 0;
+  this.__data__ = {
+    'hash': new Hash,
+    'map': new (Map || ListCache),
+    'string': new Hash
+  };
+}
+
+module.exports = mapCacheClear;
+
+
+/***/ }),
+/* 813 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var toFinite = __webpack_require__(933);
+
+/**
+ * Converts `value` to an integer.
+ *
+ * **Note:** This method is loosely based on
+ * [`ToInteger`](http://www.ecma-international.org/ecma-262/7.0/#sec-tointeger).
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to convert.
+ * @returns {number} Returns the converted integer.
+ * @example
+ *
+ * _.toInteger(3.2);
+ * // => 3
+ *
+ * _.toInteger(Number.MIN_VALUE);
+ * // => 0
+ *
+ * _.toInteger(Infinity);
+ * // => 1.7976931348623157e+308
+ *
+ * _.toInteger('3.2');
+ * // => 3
+ */
+function toInteger(value) {
+  var result = toFinite(value),
+      remainder = result % 1;
+
+  return result === result ? (remainder ? result - remainder : result) : 0;
+}
+
+module.exports = toInteger;
+
+
+/***/ }),
+/* 814 */,
+/* 815 */,
+/* 816 */,
+/* 817 */
+/***/ (function(module) {
+
+/**
+ * Creates a function that returns `value`.
+ *
+ * @static
+ * @memberOf _
+ * @since 2.4.0
+ * @category Util
+ * @param {*} value The value to return from the new function.
+ * @returns {Function} Returns the new constant function.
+ * @example
+ *
+ * var objects = _.times(2, _.constant({ 'a': 1 }));
+ *
+ * console.log(objects);
+ * // => [{ 'a': 1 }, { 'a': 1 }]
+ *
+ * console.log(objects[0] === objects[1]);
+ * // => true
+ */
+function constant(value) {
+  return function() {
+    return value;
+  };
+}
+
+module.exports = constant;
+
+
+/***/ }),
+/* 818 */,
+/* 819 */,
+/* 820 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var eq = __webpack_require__(338);
+
+/**
+ * Gets the index at which the `key` is found in `array` of key-value pairs.
+ *
+ * @private
+ * @param {Array} array The array to inspect.
+ * @param {*} key The key to search for.
+ * @returns {number} Returns the index of the matched value, else `-1`.
+ */
+function assocIndexOf(array, key) {
+  var length = array.length;
+  while (length--) {
+    if (eq(array[length][0], key)) {
+      return length;
+    }
+  }
+  return -1;
+}
+
+module.exports = assocIndexOf;
+
+
+/***/ }),
+/* 821 */,
+/* 822 */,
+/* 823 */,
+/* 824 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var freeGlobal = __webpack_require__(973);
+
+/** Detect free variable `self`. */
+var freeSelf = typeof self == 'object' && self && self.Object === Object && self;
+
+/** Used as a reference to the global object. */
+var root = freeGlobal || freeSelf || Function('return this')();
+
+module.exports = root;
+
+
+/***/ }),
+/* 825 */,
+/* 826 */,
+/* 827 */,
+/* 828 */,
+/* 829 */,
+/* 830 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+// Query String Utilities
+
+
+
+var QueryString = exports;
+var Buffer = __webpack_require__(293).Buffer;
+
+
+// a safe fast alternative to decodeURIComponent
+QueryString.unescapeBuffer = function(s, decodeSpaces) {
+  var out = new Buffer(s.length);
+  var state = 0;
+  var n, m, hexchar;
+
+  for (var inIndex = 0, outIndex = 0; inIndex <= s.length; inIndex++) {
+    var c = inIndex < s.length ? s.charCodeAt(inIndex) : NaN;
+    switch (state) {
+      case 0: // Any character
+        switch (c) {
+          case 37: // '%'
+            n = 0;
+            m = 0;
+            state = 1;
+            break;
+          case 43: // '+'
+            if (decodeSpaces)
+              c = 32; // ' '
+            // falls through
+          default:
+            out[outIndex++] = c;
+            break;
+        }
+        break;
+
+      case 1: // First hex digit
+        hexchar = c;
+        if (c >= 48/*0*/ && c <= 57/*9*/) {
+          n = c - 48/*0*/;
+        } else if (c >= 65/*A*/ && c <= 70/*F*/) {
+          n = c - 65/*A*/ + 10;
+        } else if (c >= 97/*a*/ && c <= 102/*f*/) {
+          n = c - 97/*a*/ + 10;
+        } else {
+          out[outIndex++] = 37/*%*/;
+          out[outIndex++] = c;
+          state = 0;
+          break;
+        }
+        state = 2;
+        break;
+
+      case 2: // Second hex digit
+        state = 0;
+        if (c >= 48/*0*/ && c <= 57/*9*/) {
+          m = c -  48/*0*/;
+        } else if (c >= 65/*A*/ && c <= 70/*F*/) {
+          m = c - 65/*A*/ + 10;
+        } else if (c >= 97/*a*/ && c <= 102/*f*/) {
+          m = c - 97/*a*/ + 10;
+        } else {
+          out[outIndex++] = 37/*%*/;
+          out[outIndex++] = hexchar;
+          out[outIndex++] = c;
+          break;
+        }
+        out[outIndex++] = 16 * n + m;
+        break;
+    }
+  }
+
+  // TODO support returning arbitrary buffers.
+
+  return out.slice(0, outIndex - 1);
+};
+
+
+function qsUnescape(s, decodeSpaces) {
+  try {
+    return decodeURIComponent(s);
+  } catch (e) {
+    return QueryString.unescapeBuffer(s, decodeSpaces).toString();
+  }
+}
+QueryString.unescape = qsUnescape;
+
+
+var hexTable = new Array(256);
+for (var i = 0; i < 256; ++i)
+  hexTable[i] = '%' + ((i < 16 ? '0' : '') + i.toString(16)).toUpperCase();
+QueryString.escape = function(str) {
+  // replaces encodeURIComponent
+  // http://www.ecma-international.org/ecma-262/5.1/#sec-15.1.3.4
+  if (typeof str !== 'string')
+    str += '';
+  var out = '';
+  var lastPos = 0;
+
+  for (var i = 0; i < str.length; ++i) {
+    var c = str.charCodeAt(i);
+
+    // These characters do not need escaping (in order):
+    // ! - . _ ~
+    // ' ( ) *
+    // digits
+    // alpha (uppercase)
+    // alpha (lowercase)
+    if (c === 0x21 || c === 0x2D || c === 0x2E || c === 0x5F || c === 0x7E ||
+        (c >= 0x27 && c <= 0x2A) ||
+        (c >= 0x30 && c <= 0x39) ||
+        (c >= 0x41 && c <= 0x5A) ||
+        (c >= 0x61 && c <= 0x7A)) {
+      continue;
+    }
+
+    if (i - lastPos > 0)
+      out += str.slice(lastPos, i);
+
+    // Other ASCII characters
+    if (c < 0x80) {
+      lastPos = i + 1;
+      out += hexTable[c];
+      continue;
+    }
+
+    // Multi-byte characters ...
+    if (c < 0x800) {
+      lastPos = i + 1;
+      out += hexTable[0xC0 | (c >> 6)] + hexTable[0x80 | (c & 0x3F)];
+      continue;
+    }
+    if (c < 0xD800 || c >= 0xE000) {
+      lastPos = i + 1;
+      out += hexTable[0xE0 | (c >> 12)] +
+             hexTable[0x80 | ((c >> 6) & 0x3F)] +
+             hexTable[0x80 | (c & 0x3F)];
+      continue;
+    }
+    // Surrogate pair
+    ++i;
+    var c2;
+    if (i < str.length)
+      c2 = str.charCodeAt(i) & 0x3FF;
+    else
+      throw new URIError('URI malformed');
+    lastPos = i + 1;
+    c = 0x10000 + (((c & 0x3FF) << 10) | c2);
+    out += hexTable[0xF0 | (c >> 18)] +
+           hexTable[0x80 | ((c >> 12) & 0x3F)] +
+           hexTable[0x80 | ((c >> 6) & 0x3F)] +
+           hexTable[0x80 | (c & 0x3F)];
+  }
+  if (lastPos === 0)
+    return str;
+  if (lastPos < str.length)
+    return out + str.slice(lastPos);
+  return out;
+};
+
+var stringifyPrimitive = function(v) {
+  if (typeof v === 'string')
+    return v;
+  if (typeof v === 'number' && isFinite(v))
+    return '' + v;
+  if (typeof v === 'boolean')
+    return v ? 'true' : 'false';
+  return '';
+};
+
+
+QueryString.stringify = QueryString.encode = function(obj, sep, eq, options) {
+  sep = sep || '&';
+  eq = eq || '=';
+
+  var encode = QueryString.escape;
+  if (options && typeof options.encodeURIComponent === 'function') {
+    encode = options.encodeURIComponent;
+  }
+
+  if (obj !== null && typeof obj === 'object') {
+    var keys = Object.keys(obj);
+    var len = keys.length;
+    var flast = len - 1;
+    var fields = '';
+    for (var i = 0; i < len; ++i) {
+      var k = keys[i];
+      var v = obj[k];
+      var ks = encode(stringifyPrimitive(k)) + eq;
+
+      if (Array.isArray(v)) {
+        var vlen = v.length;
+        var vlast = vlen - 1;
+        for (var j = 0; j < vlen; ++j) {
+          fields += ks + encode(stringifyPrimitive(v[j]));
+          if (j < vlast)
+            fields += sep;
+        }
+        if (vlen && i < flast)
+          fields += sep;
+      } else {
+        fields += ks + encode(stringifyPrimitive(v));
+        if (i < flast)
+          fields += sep;
+      }
+    }
+    return fields;
+  }
+  return '';
+};
+
+// Parse a key/val string.
+QueryString.parse = QueryString.decode = function(qs, sep, eq, options) {
+  sep = sep || '&';
+  eq = eq || '=';
+
+  var obj = {};
+
+  if (typeof qs !== 'string' || qs.length === 0) {
+    return obj;
+  }
+
+  if (typeof sep !== 'string')
+    sep += '';
+
+  var eqLen = eq.length;
+  var sepLen = sep.length;
+
+  var maxKeys = 1000;
+  if (options && typeof options.maxKeys === 'number') {
+    maxKeys = options.maxKeys;
+  }
+
+  var pairs = Infinity;
+  if (maxKeys > 0)
+    pairs = maxKeys;
+
+  var decode = QueryString.unescape;
+  if (options && typeof options.decodeURIComponent === 'function') {
+    decode = options.decodeURIComponent;
+  }
+  var customDecode = (decode !== qsUnescape);
+
+  var keys = [];
+  var lastPos = 0;
+  var sepIdx = 0;
+  var eqIdx = 0;
+  var key = '';
+  var value = '';
+  var keyEncoded = customDecode;
+  var valEncoded = customDecode;
+  var encodeCheck = 0;
+  for (var i = 0; i < qs.length; ++i) {
+    var code = qs.charCodeAt(i);
+
+    // Try matching key/value pair separator (e.g. '&')
+    if (code === sep.charCodeAt(sepIdx)) {
+      if (++sepIdx === sepLen) {
+        // Key/value pair separator match!
+        var end = i - sepIdx + 1;
+        if (eqIdx < eqLen) {
+          // If we didn't find the key/value separator, treat the substring as
+          // part of the key instead of the value
+          if (lastPos < end)
+            key += qs.slice(lastPos, end);
+        } else if (lastPos < end)
+          value += qs.slice(lastPos, end);
+        if (keyEncoded)
+          key = decodeStr(key, decode);
+        if (valEncoded)
+          value = decodeStr(value, decode);
+        // Use a key array lookup instead of using hasOwnProperty(), which is
+        // slower
+        if (keys.indexOf(key) === -1) {
+          obj[key] = value;
+          keys[keys.length] = key;
+        } else {
+          var curValue = obj[key];
+          // `instanceof Array` is used instead of Array.isArray() because it
+          // is ~15-20% faster with v8 4.7 and is safe to use because we are
+          // using it with values being created within this function
+          if (curValue instanceof Array)
+            curValue[curValue.length] = value;
+          else
+            obj[key] = [curValue, value];
+        }
+        if (--pairs === 0)
+          break;
+        keyEncoded = valEncoded = customDecode;
+        encodeCheck = 0;
+        key = value = '';
+        lastPos = i + 1;
+        sepIdx = eqIdx = 0;
+      }
+      continue;
+    } else {
+      sepIdx = 0;
+      if (!valEncoded) {
+        // Try to match an (valid) encoded byte (once) to minimize unnecessary
+        // calls to string decoding functions
+        if (code === 37/*%*/) {
+          encodeCheck = 1;
+        } else if (encodeCheck > 0 &&
+                   ((code >= 48/*0*/ && code <= 57/*9*/) ||
+                    (code >= 65/*A*/ && code <= 70/*Z*/) ||
+                    (code >= 97/*a*/ && code <= 102/*z*/))) {
+          if (++encodeCheck === 3)
+            valEncoded = true;
+        } else {
+          encodeCheck = 0;
+        }
+      }
+    }
+
+    // Try matching key/value separator (e.g. '=') if we haven't already
+    if (eqIdx < eqLen) {
+      if (code === eq.charCodeAt(eqIdx)) {
+        if (++eqIdx === eqLen) {
+          // Key/value separator match!
+          var end = i - eqIdx + 1;
+          if (lastPos < end)
+            key += qs.slice(lastPos, end);
+          encodeCheck = 0;
+          lastPos = i + 1;
+        }
+        continue;
+      } else {
+        eqIdx = 0;
+        if (!keyEncoded) {
+          // Try to match an (valid) encoded byte once to minimize unnecessary
+          // calls to string decoding functions
+          if (code === 37/*%*/) {
+            encodeCheck = 1;
+          } else if (encodeCheck > 0 &&
+                     ((code >= 48/*0*/ && code <= 57/*9*/) ||
+                      (code >= 65/*A*/ && code <= 70/*Z*/) ||
+                      (code >= 97/*a*/ && code <= 102/*z*/))) {
+            if (++encodeCheck === 3)
+              keyEncoded = true;
+          } else {
+            encodeCheck = 0;
+          }
+        }
+      }
+    }
+
+    if (code === 43/*+*/) {
+      if (eqIdx < eqLen) {
+        if (i - lastPos > 0)
+          key += qs.slice(lastPos, i);
+        key += '%20';
+        keyEncoded = true;
+      } else {
+        if (i - lastPos > 0)
+          value += qs.slice(lastPos, i);
+        value += '%20';
+        valEncoded = true;
+      }
+      lastPos = i + 1;
+    }
+  }
+
+  // Check if we have leftover key or value data
+  if (pairs > 0 && (lastPos < qs.length || eqIdx > 0)) {
+    if (lastPos < qs.length) {
+      if (eqIdx < eqLen)
+        key += qs.slice(lastPos);
+      else if (sepIdx < sepLen)
+        value += qs.slice(lastPos);
+    }
+    if (keyEncoded)
+      key = decodeStr(key, decode);
+    if (valEncoded)
+      value = decodeStr(value, decode);
+    // Use a key array lookup instead of using hasOwnProperty(), which is
+    // slower
+    if (keys.indexOf(key) === -1) {
+      obj[key] = value;
+      keys[keys.length] = key;
+    } else {
+      var curValue = obj[key];
+      // `instanceof Array` is used instead of Array.isArray() because it
+      // is ~15-20% faster with v8 4.7 and is safe to use because we are
+      // using it with values being created within this function
+      if (curValue instanceof Array)
+        curValue[curValue.length] = value;
+      else
+        obj[key] = [curValue, value];
+    }
+  }
+
+  return obj;
+};
+
+
+// v8 does not optimize functions with try-catch blocks, so we isolate them here
+// to minimize the damage
+function decodeStr(s, decoder) {
+  try {
+    return decoder(s);
+  } catch (e) {
+    return QueryString.unescape(s, true);
+  }
+}
+
+/***/ }),
+/* 831 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var cloneArrayBuffer = __webpack_require__(915);
+
+/**
+ * Creates a clone of `typedArray`.
+ *
+ * @private
+ * @param {Object} typedArray The typed array to clone.
+ * @param {boolean} [isDeep] Specify a deep clone.
+ * @returns {Object} Returns the cloned typed array.
+ */
+function cloneTypedArray(typedArray, isDeep) {
+  var buffer = isDeep ? cloneArrayBuffer(typedArray.buffer) : typedArray.buffer;
+  return new typedArray.constructor(buffer, typedArray.byteOffset, typedArray.length);
+}
+
+module.exports = cloneTypedArray;
+
+
+/***/ }),
+/* 832 */,
+/* 833 */,
+/* 834 */
+/***/ (function(__unusedmodule, exports) {
+
+var Hash = exports.Hash = function() {
+  this.length = 0;
+  this.items = new Array();
+  for (var i = 0; i < arguments.length; i += 2) {
+    if (typeof(arguments[i + 1]) != 'undefined') {
+      this.items[arguments[i]] = arguments[i + 1];
+      this.length++;
+    }
+  }
+}
+
+Hash.prototype.removeItem = function(in_key) {
+  var tmp_previous;
+  if (typeof(this.items[in_key]) != 'undefined') {
+    this.length--;
+    var tmp_previous = this.items[in_key];
+    delete this.items[in_key];
+  }
+   
+  return tmp_previous;
+}
+
+Hash.prototype.getItem = function(in_key) {
+  return this.items[in_key];
+}
+
+Hash.prototype.setItem = function(in_key, in_value) {
+  var tmp_previous;
+  if (typeof(in_value) != 'undefined') {
+    if (typeof(this.items[in_key]) == 'undefined') {
+      this.length++;
+    }
+    else {
+      tmp_previous = this.items[in_key];
+    }
+
+    this.items[in_key] = in_value;
+  }
+   
+  return tmp_previous;
+}
+
+Hash.prototype.hasItem = function(in_key) {
+  return typeof(this.items[in_key]) != 'undefined';
+}
+
+Hash.prototype.clear = function() {
+  for (var i in this.items) {
+    delete this.items[i];
+  }
+
+  this.length = 0;
+}
+
+
+/***/ }),
+/* 835 */
+/***/ (function(module) {
+
+module.exports = require("url");
+
+/***/ }),
+/* 836 */
+/***/ (function(__unusedmodule, exports) {
+
+"use strict";
+
+
+exports.__esModule = true;
+exports.default = void 0;
+// These functions will update the request.
+// They'll be given {req, value, paramter, spec, operation}.
+var _default = {
+  body: bodyBuilder,
+  header: headerBuilder,
+  query: queryBuilder,
+  path: pathBuilder,
+  formData: formDataBuilder
+}; // Add the body to the request
+
+exports.default = _default;
+
+function bodyBuilder({
+  req,
+  value
+}) {
+  req.body = value;
+} // Add a form data object.
+
+
+function formDataBuilder({
+  req,
+  value,
+  parameter
+}) {
+  if (value || parameter.allowEmptyValue) {
+    req.form = req.form || {};
+    req.form[parameter.name] = {
+      value,
+      allowEmptyValue: parameter.allowEmptyValue,
+      collectionFormat: parameter.collectionFormat
+    };
+  }
+} // Add a header to the request
+
+
+function headerBuilder({
+  req,
+  parameter,
+  value
+}) {
+  req.headers = req.headers || {};
+
+  if (typeof value !== 'undefined') {
+    req.headers[parameter.name] = value;
+  }
+} // Replace path paramters, with values ( ie: the URL )
+
+
+function pathBuilder({
+  req,
+  value,
+  parameter
+}) {
+  req.url = req.url.split(`{${parameter.name}}`).join(encodeURIComponent(value));
+} // Add a query to the `query` object, which will later be stringified into the URL's search
+
+
+function queryBuilder({
+  req,
+  value,
+  parameter
+}) {
+  req.query = req.query || {};
+
+  if (value === false && parameter.type === 'boolean') {
+    value = 'false';
+  }
+
+  if (value === 0 && ['number', 'integer'].indexOf(parameter.type) > -1) {
+    value = '0';
+  }
+
+  if (value) {
+    req.query[parameter.name] = {
+      collectionFormat: parameter.collectionFormat,
+      value
+    };
+  } else if (parameter.allowEmptyValue && value !== undefined) {
+    const paramName = parameter.name;
+    req.query[paramName] = req.query[paramName] || {};
+    req.query[paramName].allowEmptyValue = true;
+  }
+}
+
+/***/ }),
+/* 837 */
+/***/ (function(module) {
+
+/**
+ * lodash 3.0.0 (Custom Build) <https://lodash.com/>
+ * Build: `lodash modern modularize exports="npm" -o ./`
+ * Copyright 2012-2015 The Dojo Foundation <http://dojofoundation.org/>
+ * Based on Underscore.js 1.7.0 <http://underscorejs.org/LICENSE>
+ * Copyright 2009-2015 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
+ * Available under MIT license <https://lodash.com/license>
+ */
+
+/** Used to match template delimiters. */
+var reInterpolate = /<%=([\s\S]+?)%>/g;
+
+module.exports = reInterpolate;
+
+
+/***/ }),
+/* 838 */,
+/* 839 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var copyObject = __webpack_require__(875),
+    keys = __webpack_require__(863);
+
+/**
+ * The base implementation of `_.assign` without support for multiple sources
+ * or `customizer` functions.
+ *
+ * @private
+ * @param {Object} object The destination object.
+ * @param {Object} source The source object.
+ * @returns {Object} Returns `object`.
+ */
+function baseAssign(object, source) {
+  return object && copyObject(source, keys(source), object);
+}
+
+module.exports = baseAssign;
+
+
+/***/ }),
+/* 840 */,
+/* 841 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+"use strict";
+
+
+var Type = __webpack_require__(945);
+
+var YAML_DATE_REGEXP = new RegExp(
+  '^([0-9][0-9][0-9][0-9])'          + // [1] year
+  '-([0-9][0-9])'                    + // [2] month
+  '-([0-9][0-9])$');                   // [3] day
+
+var YAML_TIMESTAMP_REGEXP = new RegExp(
+  '^([0-9][0-9][0-9][0-9])'          + // [1] year
+  '-([0-9][0-9]?)'                   + // [2] month
+  '-([0-9][0-9]?)'                   + // [3] day
+  '(?:[Tt]|[ \\t]+)'                 + // ...
+  '([0-9][0-9]?)'                    + // [4] hour
+  ':([0-9][0-9])'                    + // [5] minute
+  ':([0-9][0-9])'                    + // [6] second
+  '(?:\\.([0-9]*))?'                 + // [7] fraction
+  '(?:[ \\t]*(Z|([-+])([0-9][0-9]?)' + // [8] tz [9] tz_sign [10] tz_hour
+  '(?::([0-9][0-9]))?))?$');           // [11] tz_minute
+
+function resolveYamlTimestamp(data) {
+  if (data === null) return false;
+  if (YAML_DATE_REGEXP.exec(data) !== null) return true;
+  if (YAML_TIMESTAMP_REGEXP.exec(data) !== null) return true;
+  return false;
+}
+
+function constructYamlTimestamp(data) {
+  var match, year, month, day, hour, minute, second, fraction = 0,
+      delta = null, tz_hour, tz_minute, date;
+
+  match = YAML_DATE_REGEXP.exec(data);
+  if (match === null) match = YAML_TIMESTAMP_REGEXP.exec(data);
+
+  if (match === null) throw new Error('Date resolve error');
+
+  // match: [1] year [2] month [3] day
+
+  year = +(match[1]);
+  month = +(match[2]) - 1; // JS month starts with 0
+  day = +(match[3]);
+
+  if (!match[4]) { // no hour
+    return new Date(Date.UTC(year, month, day));
+  }
+
+  // match: [4] hour [5] minute [6] second [7] fraction
+
+  hour = +(match[4]);
+  minute = +(match[5]);
+  second = +(match[6]);
+
+  if (match[7]) {
+    fraction = match[7].slice(0, 3);
+    while (fraction.length < 3) { // milli-seconds
+      fraction += '0';
+    }
+    fraction = +fraction;
+  }
+
+  // match: [8] tz [9] tz_sign [10] tz_hour [11] tz_minute
+
+  if (match[9]) {
+    tz_hour = +(match[10]);
+    tz_minute = +(match[11] || 0);
+    delta = (tz_hour * 60 + tz_minute) * 60000; // delta in mili-seconds
+    if (match[9] === '-') delta = -delta;
+  }
+
+  date = new Date(Date.UTC(year, month, day, hour, minute, second, fraction));
+
+  if (delta) date.setTime(date.getTime() - delta);
+
+  return date;
+}
+
+function representYamlTimestamp(object /*, style*/) {
+  return object.toISOString();
+}
+
+module.exports = new Type('tag:yaml.org,2002:timestamp', {
+  kind: 'scalar',
+  resolve: resolveYamlTimestamp,
+  construct: constructYamlTimestamp,
+  instanceOf: Date,
+  represent: representYamlTimestamp
+});
+
+
+/***/ }),
+/* 842 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+"use strict";
+
+
+var Type = __webpack_require__(945);
+
+var _hasOwnProperty = Object.prototype.hasOwnProperty;
+var _toString       = Object.prototype.toString;
+
+function resolveYamlOmap(data) {
+  if (data === null) return true;
+
+  var objectKeys = [], index, length, pair, pairKey, pairHasKey,
+      object = data;
+
+  for (index = 0, length = object.length; index < length; index += 1) {
+    pair = object[index];
+    pairHasKey = false;
+
+    if (_toString.call(pair) !== '[object Object]') return false;
+
+    for (pairKey in pair) {
+      if (_hasOwnProperty.call(pair, pairKey)) {
+        if (!pairHasKey) pairHasKey = true;
+        else return false;
+      }
+    }
+
+    if (!pairHasKey) return false;
+
+    if (objectKeys.indexOf(pairKey) === -1) objectKeys.push(pairKey);
+    else return false;
+  }
+
+  return true;
+}
+
+function constructYamlOmap(data) {
+  return data !== null ? data : [];
+}
+
+module.exports = new Type('tag:yaml.org,2002:omap', {
+  kind: 'sequence',
+  resolve: resolveYamlOmap,
+  construct: constructYamlOmap
+});
+
+
+/***/ }),
+/* 843 */,
+/* 844 */,
+/* 845 */,
+/* 846 */,
+/* 847 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var assignValue = __webpack_require__(363),
+    castPath = __webpack_require__(929),
+    isIndex = __webpack_require__(160),
+    isObject = __webpack_require__(323),
+    toKey = __webpack_require__(503);
+
+/**
+ * The base implementation of `_.set`.
+ *
+ * @private
+ * @param {Object} object The object to modify.
+ * @param {Array|string} path The path of the property to set.
+ * @param {*} value The value to set.
+ * @param {Function} [customizer] The function to customize path creation.
+ * @returns {Object} Returns `object`.
+ */
+function baseSet(object, path, value, customizer) {
+  if (!isObject(object)) {
+    return object;
+  }
+  path = castPath(path, object);
+
+  var index = -1,
+      length = path.length,
+      lastIndex = length - 1,
+      nested = object;
+
+  while (nested != null && ++index < length) {
+    var key = toKey(path[index]),
+        newValue = value;
+
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      return object;
+    }
+
+    if (index != lastIndex) {
+      var objValue = nested[key];
+      newValue = customizer ? customizer(objValue, key, nested) : undefined;
+      if (newValue === undefined) {
+        newValue = isObject(objValue)
+          ? objValue
+          : (isIndex(path[index + 1]) ? [] : {});
+      }
+    }
+    assignValue(nested, key, newValue);
+    nested = nested[key];
+  }
+  return object;
+}
+
+module.exports = baseSet;
+
+
+/***/ }),
+/* 848 */,
+/* 849 */,
+/* 850 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var baseIsTypedArray = __webpack_require__(412),
+    baseUnary = __webpack_require__(231),
+    nodeUtil = __webpack_require__(616);
+
+/* Node.js helper references. */
+var nodeIsTypedArray = nodeUtil && nodeUtil.isTypedArray;
+
+/**
+ * Checks if `value` is classified as a typed array.
+ *
+ * @static
+ * @memberOf _
+ * @since 3.0.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is a typed array, else `false`.
+ * @example
+ *
+ * _.isTypedArray(new Uint8Array);
+ * // => true
+ *
+ * _.isTypedArray([]);
+ * // => false
+ */
+var isTypedArray = nodeIsTypedArray ? baseUnary(nodeIsTypedArray) : baseIsTypedArray;
+
+module.exports = isTypedArray;
+
+
+/***/ }),
+/* 851 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var isObject = __webpack_require__(323),
+    isPrototype = __webpack_require__(514),
+    nativeKeysIn = __webpack_require__(540);
+
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty = objectProto.hasOwnProperty;
+
+/**
+ * The base implementation of `_.keysIn` which doesn't treat sparse arrays as dense.
+ *
+ * @private
+ * @param {Object} object The object to query.
+ * @returns {Array} Returns the array of property names.
+ */
+function baseKeysIn(object) {
+  if (!isObject(object)) {
+    return nativeKeysIn(object);
+  }
+  var isProto = isPrototype(object),
+      result = [];
+
+  for (var key in object) {
+    if (!(key == 'constructor' && (isProto || !hasOwnProperty.call(object, key)))) {
+      result.push(key);
+    }
+  }
+  return result;
+}
+
+module.exports = baseKeysIn;
+
+
+/***/ }),
+/* 852 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+/*!
+ * mime-db
+ * Copyright(c) 2014 Jonathan Ong
+ * MIT Licensed
+ */
+
+/**
+ * Module exports.
+ */
+
+module.exports = __webpack_require__(539)
+
+
+/***/ }),
+/* 853 */,
+/* 854 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var isObject = __webpack_require__(323);
+
+/**
+ * Checks if `value` is suitable for strict equality comparisons, i.e. `===`.
+ *
+ * @private
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` if suitable for strict
+ *  equality comparisons, else `false`.
+ */
+function isStrictComparable(value) {
+  return value === value && !isObject(value);
+}
+
+module.exports = isStrictComparable;
+
+
+/***/ }),
+/* 855 */,
+/* 856 */,
+/* 857 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var arrayPush = __webpack_require__(883),
+    isArray = __webpack_require__(143);
+
+/**
+ * The base implementation of `getAllKeys` and `getAllKeysIn` which uses
+ * `keysFunc` and `symbolsFunc` to get the enumerable property names and
+ * symbols of `object`.
+ *
+ * @private
+ * @param {Object} object The object to query.
+ * @param {Function} keysFunc The function to get the keys of `object`.
+ * @param {Function} symbolsFunc The function to get the symbols of `object`.
+ * @returns {Array} Returns the array of property names and symbols.
+ */
+function baseGetAllKeys(object, keysFunc, symbolsFunc) {
+  var result = keysFunc(object);
+  return isArray(object) ? result : arrayPush(result, symbolsFunc(object));
+}
+
+module.exports = baseGetAllKeys;
+
+
+/***/ }),
+/* 858 */,
+/* 859 */,
+/* 860 */,
+/* 861 */,
+/* 862 */,
+/* 863 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var arrayLikeKeys = __webpack_require__(389),
+    baseKeys = __webpack_require__(351),
+    isArrayLike = __webpack_require__(146);
+
+/**
+ * Creates an array of the own enumerable property names of `object`.
+ *
+ * **Note:** Non-object values are coerced to objects. See the
+ * [ES spec](http://ecma-international.org/ecma-262/7.0/#sec-object.keys)
+ * for more details.
+ *
+ * @static
+ * @since 0.1.0
+ * @memberOf _
+ * @category Object
+ * @param {Object} object The object to query.
+ * @returns {Array} Returns the array of property names.
+ * @example
+ *
+ * function Foo() {
+ *   this.a = 1;
+ *   this.b = 2;
+ * }
+ *
+ * Foo.prototype.c = 3;
+ *
+ * _.keys(new Foo);
+ * // => ['a', 'b'] (iteration order is not guaranteed)
+ *
+ * _.keys('hi');
+ * // => ['0', '1']
+ */
+function keys(object) {
+  return isArrayLike(object) ? arrayLikeKeys(object) : baseKeys(object);
+}
+
+module.exports = keys;
+
+
+/***/ }),
+/* 864 */,
+/* 865 */,
+/* 866 */,
+/* 867 */,
+/* 868 */,
+/* 869 */,
+/* 870 */
+/***/ (function(module) {
+
+/**
+ * Gets the stack value for `key`.
+ *
+ * @private
+ * @name get
+ * @memberOf Stack
+ * @param {string} key The key of the value to get.
+ * @returns {*} Returns the entry value.
+ */
+function stackGet(key) {
+  return this.__data__.get(key);
+}
+
+module.exports = stackGet;
+
+
+/***/ }),
+/* 871 */,
+/* 872 */,
+/* 873 */,
+/* 874 */,
+/* 875 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var assignValue = __webpack_require__(363),
+    baseAssignValue = __webpack_require__(772);
+
+/**
+ * Copies properties of `source` to `object`.
+ *
+ * @private
+ * @param {Object} source The object to copy properties from.
+ * @param {Array} props The property identifiers to copy.
+ * @param {Object} [object={}] The object to copy properties to.
+ * @param {Function} [customizer] The function to customize copied values.
+ * @returns {Object} Returns `object`.
+ */
+function copyObject(source, props, object, customizer) {
+  var isNew = !object;
+  object || (object = {});
+
+  var index = -1,
+      length = props.length;
+
+  while (++index < length) {
+    var key = props[index];
+
+    var newValue = customizer
+      ? customizer(object[key], source[key], key, object, source)
+      : undefined;
+
+    if (newValue === undefined) {
+      newValue = source[key];
+    }
+    if (isNew) {
+      baseAssignValue(object, key, newValue);
+    } else {
+      assignValue(object, key, newValue);
+    }
+  }
+  return object;
+}
+
+module.exports = copyObject;
+
+
+/***/ }),
+/* 876 */,
+/* 877 */,
+/* 878 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var getNative = __webpack_require__(319);
+
+/* Built-in method references that are verified to be native. */
+var nativeCreate = getNative(Object, 'create');
+
+module.exports = nativeCreate;
+
+
+/***/ }),
+/* 879 */
+/***/ (function(module) {
+
+/**
+ * Gets the value at `key` of `object`.
+ *
+ * @private
+ * @param {Object} [object] The object to query.
+ * @param {string} key The key of the property to get.
+ * @returns {*} Returns the property value.
+ */
+function getValue(object, key) {
+  return object == null ? undefined : object[key];
+}
+
+module.exports = getValue;
+
+
+/***/ }),
+/* 880 */,
+/* 881 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+
+exports.__esModule = true;
+exports.default = resolveSubtree;
+
+var _get = _interopRequireDefault(__webpack_require__(0));
+
+var _resolver = _interopRequireDefault(__webpack_require__(922));
+
+var _helpers = __webpack_require__(992);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function ownKeys(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); keys.push.apply(keys, symbols); } return keys; }
+
+function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i] != null ? arguments[i] : {}; if (i % 2) { ownKeys(Object(source), true).forEach(function (key) { _defineProperty(target, key, source[key]); }); } else if (Object.getOwnPropertyDescriptors) { Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)); } else { ownKeys(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } } return target; }
+
+function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
+async function resolveSubtree(obj, path, opts = {}) {
+  const {
+    returnEntireTree,
+    baseDoc,
+    requestInterceptor,
+    responseInterceptor,
+    parameterMacro,
+    modelPropertyMacro,
+    useCircularStructures
+  } = opts;
+  const resolveOptions = {
+    pathDiscriminator: path,
+    baseDoc,
+    requestInterceptor,
+    responseInterceptor,
+    parameterMacro,
+    modelPropertyMacro,
+    useCircularStructures
+  };
+  const {
+    spec: normalized
+  } = (0, _helpers.normalizeSwagger)({
+    spec: obj
+  });
+  const result = await (0, _resolver.default)(_objectSpread(_objectSpread({}, resolveOptions), {}, {
+    spec: normalized,
+    allowMetaPatches: true,
+    skipNormalization: true
+  }));
+
+  if (!returnEntireTree && Array.isArray(path) && path.length) {
+    result.spec = (0, _get.default)(result.spec, path) || null;
+  }
+
+  return result;
+}
+
+/***/ }),
+/* 882 */,
+/* 883 */
+/***/ (function(module) {
+
+/**
+ * Appends the elements of `values` to `array`.
+ *
+ * @private
+ * @param {Array} array The array to modify.
+ * @param {Array} values The values to append.
+ * @returns {Array} Returns `array`.
+ */
+function arrayPush(array, values) {
+  var index = -1,
+      length = values.length,
+      offset = array.length;
+
+  while (++index < length) {
+    array[offset + index] = values[index];
+  }
+  return array;
+}
+
+module.exports = arrayPush;
+
+
+/***/ }),
+/* 884 */,
+/* 885 */,
+/* 886 */,
+/* 887 */,
+/* 888 */,
+/* 889 */,
+/* 890 */,
+/* 891 */,
+/* 892 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var iterate    = __webpack_require__(157)
+  , initState  = __webpack_require__(794)
+  , terminator = __webpack_require__(939)
+  ;
+
+// Public API
+module.exports = serialOrdered;
+// sorting helpers
+module.exports.ascending  = ascending;
+module.exports.descending = descending;
+
+/**
+ * Runs iterator over provided sorted array elements in series
+ *
+ * @param   {array|object} list - array or object (named list) to iterate over
+ * @param   {function} iterator - iterator to run
+ * @param   {function} sortMethod - custom sort function
+ * @param   {function} callback - invoked when all elements processed
+ * @returns {function} - jobs terminator
+ */
+function serialOrdered(list, iterator, sortMethod, callback)
+{
+  var state = initState(list, sortMethod);
+
+  iterate(list, iterator, state, function iteratorHandler(error, result)
+  {
+    if (error)
+    {
+      callback(error, result);
+      return;
+    }
+
+    state.index++;
+
+    // are we there yet?
+    if (state.index < (state['keyedList'] || list).length)
+    {
+      iterate(list, iterator, state, iteratorHandler);
+      return;
+    }
+
+    // done here
+    callback(null, state.results);
+  });
+
+  return terminator.bind(state, callback);
+}
+
+/*
+ * -- Sort methods
+ */
+
+/**
+ * sort helper to sort array elements in ascending order
+ *
+ * @param   {mixed} a - an item to compare
+ * @param   {mixed} b - an item to compare
+ * @returns {number} - comparison result
+ */
+function ascending(a, b)
+{
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * sort helper to sort array elements in descending order
+ *
+ * @param   {mixed} a - an item to compare
+ * @param   {mixed} b - an item to compare
+ * @returns {number} - comparison result
+ */
+function descending(a, b)
+{
+  return -1 * ascending(a, b);
+}
+
+
+/***/ }),
+/* 893 */,
+/* 894 */,
+/* 895 */,
+/* 896 */
+/***/ (function(module) {
+
+/**
+ * Checks if a stack value for `key` exists.
+ *
+ * @private
+ * @name has
+ * @memberOf Stack
+ * @param {string} key The key of the entry to check.
+ * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+ */
+function stackHas(key) {
+  return this.__data__.has(key);
+}
+
+module.exports = stackHas;
+
+
+/***/ }),
+/* 897 */,
+/* 898 */,
+/* 899 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var baseClamp = __webpack_require__(295),
+    baseToString = __webpack_require__(280),
+    toInteger = __webpack_require__(813),
+    toString = __webpack_require__(428);
+
+/**
+ * Checks if `string` starts with the given target string.
+ *
+ * @static
+ * @memberOf _
+ * @since 3.0.0
+ * @category String
+ * @param {string} [string=''] The string to inspect.
+ * @param {string} [target] The string to search for.
+ * @param {number} [position=0] The position to search from.
+ * @returns {boolean} Returns `true` if `string` starts with `target`,
+ *  else `false`.
+ * @example
+ *
+ * _.startsWith('abc', 'a');
+ * // => true
+ *
+ * _.startsWith('abc', 'b');
+ * // => false
+ *
+ * _.startsWith('abc', 'b', 1);
+ * // => true
+ */
+function startsWith(string, target, position) {
+  string = toString(string);
+  position = position == null
+    ? 0
+    : baseClamp(toInteger(position), 0, string.length);
+
+  target = baseToString(target);
+  return string.slice(position, position + target.length) == target;
+}
+
+module.exports = startsWith;
+
+
+/***/ }),
+/* 900 */,
+/* 901 */,
+/* 902 */,
+/* 903 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var assocIndexOf = __webpack_require__(820);
+
+/**
+ * Checks if a list cache value for `key` exists.
+ *
+ * @private
+ * @name has
+ * @memberOf ListCache
+ * @param {string} key The key of the entry to check.
+ * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+ */
+function listCacheHas(key) {
+  return assocIndexOf(this.__data__, key) > -1;
+}
+
+module.exports = listCacheHas;
+
+
+/***/ }),
+/* 904 */,
+/* 905 */,
+/* 906 */
+/***/ (function(module) {
+
+/** Used to detect hot functions by number of calls within a span of milliseconds. */
+var HOT_COUNT = 800,
+    HOT_SPAN = 16;
+
+/* Built-in method references for those with the same name as other `lodash` methods. */
+var nativeNow = Date.now;
+
+/**
+ * Creates a function that'll short out and invoke `identity` instead
+ * of `func` when it's called `HOT_COUNT` or more times in `HOT_SPAN`
+ * milliseconds.
+ *
+ * @private
+ * @param {Function} func The function to restrict.
+ * @returns {Function} Returns the new shortable function.
+ */
+function shortOut(func) {
+  var count = 0,
+      lastCalled = 0;
+
+  return function() {
+    var stamp = nativeNow(),
+        remaining = HOT_SPAN - (stamp - lastCalled);
+
+    lastCalled = stamp;
+    if (remaining > 0) {
+      if (++count >= HOT_COUNT) {
+        return arguments[0];
+      }
+    } else {
+      count = 0;
+    }
+    return func.apply(undefined, arguments);
+  };
+}
+
+module.exports = shortOut;
+
+
+/***/ }),
 /* 907 */,
 /* 908 */,
 /* 909 */,
@@ -22294,6 +23512,8 @@ module.exports = cloneArrayBuffer;
 
 const Swagger = __webpack_require__(601)
 const VERSION = __webpack_require__(788).version
+const fetch = __webpack_require__(454)
+const graphviz = __webpack_require__(527)
 
 /**
 * This class provides methods to call the Lightstep Public APs.
@@ -22328,11 +23548,24 @@ class LightstepAPI {
         return this
     }
 
+    basePath() {
+        return __webpack_require__(732).basePath
+    }
+
+    defaultHostname() {
+        return __webpack_require__(732).host
+    }
+
+    getApiHostname() {
+        return process.env.LIGHTSTEP_HOST || process.env.LIGHTSTEP_API_HOST || this.defaultHostname()
+    }
+
     _initConvenienceFunctions() {
         const shortcuts = {
             listProjects   : this.sdk.apis.Projects.listProjectsID,
             listServices   : this.sdk.apis.Services.listServicesID,
             listStreams    : this.sdk.apis.Streams.listStreamsID,
+            getStream      : this.sdk.apis.Streams.getStreamID,
             timeseries     : this.sdk.apis.Streams.timeseriesID,
             storedTraces   : this.sdk.apis.Traces.storedTracesID,
             createSnapshot : this.sdk.apis.Snapshots.createSnapshot,
@@ -22460,6 +23693,65 @@ class LightstepAPI {
         }
         const trace = timeseries.body.data.attributes.exemplars.find(exemplarSelector)
         return await this.storedTraces({ project : projectId, 'span-id' : trace.trace_handle })
+    }
+
+    /**
+     * Returns a snapshot from the API
+     */
+    async getSnapshot({project, snapshotId}) {
+        // eslint-disable-next-line max-len
+        const url = `https://${this.getApiHostname()}${this.basePath()}/${this.orgId}/projects/${project}/snapshots/${snapshotId}`
+        const response = await fetch(url, {
+            method  : 'GET',
+            headers : {
+                "Content-Type"  : "application/json",
+                "Authorization" : `Bearer ${this.apiKey}`,
+            }
+        } )
+        if (response.status !== 200) {
+            const text = await response.text()
+            throw new Error(`HTTP Error ${response.status}: ${text}`)
+        }
+        return await response.json()
+    }
+
+    /**
+     * Returns a service diagram from a snapshot id from the API
+     */
+    async getServiceDiagram({project, snapshotId}) {
+        const hostname = this.getApiHostname()
+        const basePath = this.basePath()
+        // eslint-disable-next-line max-len
+        const reqUrl = `https://${hostname}${basePath}/${this.orgId}/projects/${project}/snapshots/${snapshotId}/service-diagram`
+        const response = await fetch(reqUrl, {
+            method  : 'GET',
+            headers : {
+                "Content-Type"  : "application/json",
+                "Authorization" : `Bearer ${this.apiKey}`,
+            }
+        } )
+        if (response.status !== 200 && response.status !== 202) {
+            const text = await response.text()
+            throw new Error(`HTTP Error ${response.status}: ${text}`)
+        }
+        return await response.json()
+    }
+
+    /**
+     * Converts a Lightstep service diagram to dotviz format
+     */
+    diagramToGraphviz(diagramJson) {
+        var g = graphviz.digraph('LS')
+        const nodes = diagramJson.data.attributes['service-diagram'].nodes
+
+        for (var n in nodes) {
+            g.addNode(nodes[n].service_name)
+        }
+        const edges = diagramJson.data.attributes['service-diagram'].edges
+        for (var e in edges) {
+            g.addEdge(edges[e].from, edges[e].to)
+        }
+        return g.to_dot()
     }
 }
 

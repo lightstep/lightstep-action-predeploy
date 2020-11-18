@@ -6,6 +6,8 @@ This Javascript-based action can be used when a pull request is approved by GitH
 
 :book: [Follow the tutorial on setting up this action on Lightstep's Documentation Portal](https://docs.lightstep.com/paths/git-hub-action-path)
 
+![Example Output in a PR](./example/images/pr-comment.png)
+
 ## Requirements
 
 ### GitHub
@@ -18,12 +20,14 @@ This Javascript-based action can be used when a pull request is approved by GitH
   * Instrumented service(s) running in a production environment
     * Deployment tracking configured for the service
     * Streams created for instrumented service
-    * Alerts threshold(s) defined for streams
+    * Alert threshold(s) defined for streams
     * Lightstep [public API key](https://docs.lightstep.com/docs/create-and-manage-api-keys)
 
 ## Usage
 
 This action can be run on `ubuntu-latest` GitHub Actions runner as a step in any GitHub Action workflow:
+
+Most users will also want to specify a list of specific conditions to check in the `lightstep.yml` file (see example below).
 
 ```yaml
     steps:  
@@ -99,6 +103,9 @@ Additional inputs (_optional_):
 | -------------------- | ----------------- | ---------------------- | 
 | `pagerduty_api_token`| N/A               | `PAGERDUTY_API_TOKEN`  |
 | `rollbar_api_token`  | N/A               | `ROLLBAR_API_TOKEN`    |
+| `rollup_conditions`  | N/A               | N/A                    |
+
+`rollup_conditions` will collapse all conditions to a single row of the output table if set to `true`.
 
 ## `.lightstep.yml` Configuration
 
