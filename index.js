@@ -14,7 +14,7 @@ async function run() {
         const lightstepOrg = resolveActionInput('lightstep_organization', yamlFile)
         const lightstepProj = resolveActionInput('lightstep_project', yamlFile)
         const lightstepToken = resolveActionInput('lightstep_api_key')
-        const isRollup = resolveActionInput('rollup_conditions') || false
+        const isRollup = resolveActionInput('rollup_conditions') === 'true'
 
         await predeploy({ lightstepOrg, lightstepProj, lightstepToken, yamlFile, isRollup })
 
