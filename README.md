@@ -17,11 +17,11 @@ This Javascript-based action can be used when a pull request is approved by GitH
     * `.lightstep.yml` configuration file in root directory of repository
 
 ### Lightstep
-  * Instrumented service(s) running in a production environment
+  * Instrumented service(s) running in a production environment ([create account here](https://app.lightstep.com/signup))
     * Deployment tracking configured for the service
     * Streams created for instrumented service
     * Alert threshold(s) defined for streams
-    * Lightstep [public API key](https://docs.lightstep.com/docs/create-and-manage-api-keys)
+    * Lightstep [API key](https://docs.lightstep.com/docs/create-and-manage-api-keys)
 
 ## Usage
 
