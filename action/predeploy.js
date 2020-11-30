@@ -1,6 +1,8 @@
 const lightstepContext = require('./context/lightstep')
 const rollbarContext = require('./context/rollbar')
 const pagerdutyContext = require('./context/pagerduty')
+const github = require('@actions/github')
+
 const { assertActionInput, resolveActionInput } = require('./utils')
 
 const core = require('@actions/core')
@@ -79,5 +81,50 @@ module.exports.predeploy = async function({ lightstepOrg, lightstepProj, lightst
     const markdown = prTemplate(templateContext)
     core.setOutput('lightstep_predeploy_status', templateContext.status)
     core.setOutput('lightstep_predeploy_md', markdown)
+
+    // add pull request or issue comment
+    const disableComment = resolveActionInput('disable_comment')
+    const token = resolveActionInput('github_token')
+    if (disableComment !== 'true' && token && token.length > 0) {
+        var octokit
+        try {
+            octokit = github.getOctokit(token)
+        } catch (e) {
+            core.setFailed(`could not initialize github api client: ${e}`)
+            return
+        }
+
+        const context = github.context
+        if (context.issue && context.issue.number) {
+            await octokit.issues.createComment({
+                issue_number : context.issue.number,
+                owner        : context.repo.owner,
+                repo         : context.repo.repo,
+                body         : markdown,
+            })
+        } else if (context.sha) {
+            core.info(`attempting to find pr: ${context.repo.owner}/${context.repo.repo}@${context.sha}...`)
+            const pulls = await octokit.repos.listPullRequestsAssociatedWithCommit({
+                owner      : context.repo.owner,
+                repo       : context.repo.repo,
+                commit_sha : context.sha,
+            })
+            if (pulls.data.length === 0) {
+                core.info('could not find a pull request associated with the git sha')
+                return
+            }
+            const num = pulls.data[0].number
+            core.info(`commenting on pr #{num}...`)
+            await octokit.issues.createComment({
+                issue_number : num,
+                owner        : context.repo.owner,
+                repo         : context.repo.repo,
+                body         : markdown
+            })
+        } else {
+            core.info('could not find a SHA or issue number')
+        }
+    }
+
     return Promise.resolve()
 }

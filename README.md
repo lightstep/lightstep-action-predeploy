@@ -25,18 +25,9 @@ This Javascript-based action can be used when a pull request is approved by GitH
 
 ## Usage
 
-This action can be run on `ubuntu-latest` GitHub Actions runner as a step in any GitHub Action workflow:
+This action can be run on `ubuntu-latest` GitHub Actions runner as a step in any GitHub Action workflow.
 
 Most users will also want to specify a list of specific conditions to check in the `lightstep.yml` file (see example below).
-
-```yaml
-    steps:  
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Lightstep Pre-Deploy Check
-        uses: lightstep/lightstep-action-predeploy
-```
 
 ### Example Workflow
 
@@ -57,26 +48,20 @@ jobs:
     name: Verify Pre-Deploy Status
 
     steps:  
+      # Using checkout is required if reading from a `.lightstep.yml` file in the repo
       - name: Checkout
         uses: actions/checkout@v2
 
-      # Run checks
+      # Run checks and output status as PR comment
       - name: Lightstep Pre-Deploy Check
         id: lightstep-predeploy
         uses: lightstep/lightstep-action-predeploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           lightstep_api_key: ${{ secrets.LIGHTSTEP_API_KEY }}
           pagerduty_api_token: ${{ secrets.PAGERDUTY_API_TOKEN }}
           rollbar_api_token: ${{ secrets.ROLLBAR_API_TOKEN }}
-
-      # Output status as PR comment
-      - name: Add PR Comment
-        uses: unsplash/comment-on-pr@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          msg: ${{ steps.lightstep-predeploy.outputs.lightstep_predeploy_md }}
-          check_for_duplicate_msg: true
 ```
 
 ### Additional Examples

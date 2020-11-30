@@ -8,22 +8,18 @@ jobs:
     runs-on: ubuntu-latest
     name: Verify Pre-Deploy Status
 
-    steps:  
+    steps:
+      # Using checkout is required if reading from a `.lightstep.yml` file in the repo
       - name: Checkout
         uses: actions/checkout@v2
 
       - name: Lightstep Pre-Deploy Check
         id: lightstep-predeploy
-        uses: lightstep/lightstep-action-predeploy@v0.1.4
+        uses: lightstep/lightstep-action-predeploy@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           lightstep_api_key: ${{ secrets.LIGHTSTEP_API_TOKEN }}
           pagerduty_api_token: ${{ secrets.PAGERDUTY_API_TOKEN }}
           rollbar_api_token: ${{ secrets.ROLLBAR_API_TOKEN }}
 
-      - name: Add Comment
-        uses: unsplash/comment-on-pr@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          msg: ${{ steps.lightstep-predeploy.outputs.lightstep_predeploy_md }}
-          check_for_duplicate_msg: true

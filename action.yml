@@ -28,7 +28,11 @@ inputs:
     required: false
 
   rollup_conditions:
-    description: 'Collapse all conditions to a single table row'
+    description: 'If set to true, collapse all conditions to a single table row'
+    required: false
+
+  disable_comment:
+    description: 'If set to true, will not add a comment to pull-requests'
     required: false
 
 outputs:
