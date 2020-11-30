@@ -10,12 +10,16 @@ async function run() {
         assertActionInput('lightstep_api_key')
         assertActionInput('lightstep_organization', yamlFile)
         assertActionInput('lightstep_project', yamlFile)
-
         const lightstepOrg = resolveActionInput('lightstep_organization', yamlFile)
         const lightstepProj = resolveActionInput('lightstep_project', yamlFile)
         const lightstepToken = resolveActionInput('lightstep_api_key')
-        const isRollup = resolveActionInput('rollup_conditions') === 'true'
+        core.info(`Using Lightstep organization: ${lightstepOrg}`)
+        core.info(`Using Lightstep project: ${lightstepProj}`)
 
+        const isRollup = resolveActionInput('rollup_conditions') === 'true'
+        if (isRollup) {
+            core.info('Rolling up conditions in table...')
+        }
         await predeploy({ lightstepOrg, lightstepProj, lightstepToken, yamlFile, isRollup })
 
         core.setOutput('lightstep_organization', lightstepOrg)
