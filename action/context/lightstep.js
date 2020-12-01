@@ -40,7 +40,7 @@ const getApiContext = async ({lightstepProj, lightstepOrg, lightstepToken, light
     const conditionStatuses = conditionStatusResponses.map(s => {
         const cleanId = s.body.data.id.replace('-status', '')
         const streamLink =
-            `https://app.lightstep.com/demo/stream/${conditionStreams[cleanId]}?selected_condition_id=${cleanId}`
+            `https://${LIGHTSTEP_WEB_HOST}/${lightstepProj}/stream/${conditionStreams[cleanId]}?selected_condition_id=${cleanId}`
         return {
             id          : cleanId,
             stream      : conditionStreams[cleanId],
